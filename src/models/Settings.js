@@ -62,18 +62,6 @@ export const Settings = sequelize.define("settings", {
         type: DataTypes.STRING,
         defaultValue: "xat.wiki,xatblog.net,xatimg.com,xat.com,google.com,facebook.com,instagram.com,twitter.com,discord.gg,youtube.com"
     },
-    char: {
-        type: DataTypes.STRING,
-        defaultValue: "!"
-    },
-    welcome_msg: {
-        type: DataTypes.STRING,
-        defaultValue: "Welcome to {chatname}, {name}!"
-    },
-    welcome_type: {
-        type: DataTypes.STRING,
-        defaultValue: "pm"
-    },
     nick: {
         type: DataTypes.STRING,
         defaultValue: "Bot"

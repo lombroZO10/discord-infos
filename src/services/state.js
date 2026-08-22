@@ -7,7 +7,6 @@ export class BotState {
         this.badwords = {};
         this.loginInfo = {};
         this.settings = {};
-        this.commands = {};
         this.usersFlood = {};
         this.users = new Map();
         this.userKicks = new Map();
@@ -21,7 +20,6 @@ export class BotState {
             websocketUrl: process.env.WEBSOCKET_URL,
             websocketOrigin: process.env.WEBSOCKET_ORIGIN,
             openaiApiKey: process.env.OPENAI_KEY,
-            owners: JSON.parse(process.env.BOT_OWNERS),
             disabledPowers: JSON.parse(process.env.DISABLED_POWERS),
         };
     }

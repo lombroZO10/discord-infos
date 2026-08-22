@@ -16,14 +16,6 @@ export default {
 
         if (!message) return;
 
-        if (message[0] === bot.state.settings.char) {
-            return await bot.commandHandler.handle(
-                message, 
-                userID, 
-                "main"
-            );
-        }
-
         if (bot.state.settings.modFilters)
             await bot.moderationFilters(userID, message);
     },

@@ -7,7 +7,6 @@ import KissTransferGiftHandler from "./KissTransferGiftHandler.js"
 import LoginErrorHandler from "./LoginErrorHandler.js"
 import LogoutHandler from "./LogoutHandler.js"
 import MessageHandler from "./MessageHandler.js"
-import PrivateMessageHandler from "./PrivateMessageHandler.js"
 import TickleHandler from "./TickleHandler.js"
 import UserJoinedHandler from "./UserJoinedHandler.js"
 import UserLeftHandler from "./UserLeftHandler.js"
@@ -22,7 +21,6 @@ export default [
     LoginErrorHandler,
     LogoutHandler,
     MessageHandler,
-    PrivateMessageHandler,
     TickleHandler,
     UserJoinedHandler,
     UserLeftHandler

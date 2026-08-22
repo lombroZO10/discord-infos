@@ -5,7 +5,6 @@ import { WebSocketData } from "../services/websocket.js";
 import { XatBlogAPI } from "../api/XatBlogAPI.js";
 import { sanitize, runIfConnected } from "../utils/helpers.js";
 import { PacketHandler } from "./PacketHandler.js";
-import { CommandHandler } from "./CommandHandler.js";
 import { Settings } from "../models/Settings.js";
 import { OpenAI } from "../api/OpenAI.js";
 
@@ -21,7 +20,6 @@ export class Bot {
         this.xatBlogAPI = new XatBlogAPI();
 
         this.packetHandler = new PacketHandler(this);
-        this.commandHandler = new CommandHandler(this);
 
         this.init();
     }
@@ -41,7 +39,6 @@ export class Bot {
 
             await this.getChatInfo();
             await this.packetHandler.init();
-            await this.commandHandler.init();
 
             try {
                 const data = await fs.readFile('./badwords.json', 'utf-8');
@@ -126,57 +123,6 @@ export class Bot {
     }
 
     /**
-     * Reply to a message.
-     * @param {string} message - Message
-     * @param {string} to - User ID
-     */
-    async reply (message, userId, to) {
-        if (to === "pm") {
-            return await this.sendPM(message, userId);
-        } else if (to === "pc") {
-            return await this.sendPC(message, userId);
-        }
-        await this.sendMessage(message);
-    }
-
-    /**
-     * Sends a PC to a user.
-     * @param {string} message - Message
-     * @param {number} userId - User ID
-     */
-    async sendPC (message, userId) {
-        await this.send("p", {
-            u: userId,
-            t: message,
-            s: 2,
-            d: this.state.loginInfo.i,
-        });
-    }
-
-    /**
-     * Sends a PM to a user.
-     * @param {string} message - Message
-     * @param {number} userId - User ID
-     */
-    async sendPM (message, userId) {
-        await this.send("p", {
-            u: userId,
-            t: message,
-        });
-    }
-
-    /**
-     * Sends a message to the chat room.
-     * @param {string} message - Message
-     */
-    async sendMessage (message) {
-        await this.send("m", {
-            t: message,
-            u: this.state.loginInfo.i,
-        });
-    }
-
-    /**
      * Restart xat bot.
      */
     async restart () {
@@ -203,21 +149,6 @@ export class Bot {
         this.state.settings = await Settings.findOne({
             where: { id: 1 }
         });
-    }
-
-    /**
-     * Update fields on database.
-     * @param {object} toUpdate 
-     */
-    async updateDb (toUpdate) {
-        try {
-            await Settings.update(toUpdate, {
-                where: { id: 1 }
-            });
-            await this.getFromDb();
-        } catch (error) {
-            this.logger.error(`Error updating settings: ${error} - ${error.stack}`)
-        }
     }
 
     /**
@@ -272,58 +203,6 @@ export class Bot {
         if (gamebanid) packet.w = gamebanid;
 
         this.send("c", packet);
-    }
-
-    /**
-     * Unbans a user.
-     * @param {number} userId - User ID to unban.
-     */
-    async unban (userId) {
-        this.send("c", {
-            u: userId,
-            t: '/u'
-        });
-    }
-
-    /**
-     * Changes a user's rank.
-     * @param {number} userId - User ID.
-     * @param {string} rank - Rank string: 'owner', 'moderator', 'member', 'guest'.
-     */
-    async giveRank (userId, rank) {
-        const rankCmd = {
-            owner: '/M',
-            moderator: '/m',
-            member: '/e',
-            guest: '/r',
-        };
-
-        if (!rankCmd[rank]) return;
-
-        this.send("c", {
-            u: userId,
-            t: rankCmd[rank]
-        });
-    }
-
-    /**
-     * Gives a temporary rank to a user.
-     * @param {number} userId - User ID.
-     * @param {string} rank - Rank string: 'owner', 'moderator', 'member'.
-     * @param {number} hours - Number of hours (1-24).
-     */
-    async giveTempRank (userId, rank, hours) {
-        if (!hours || hours < 1 || hours > 24) hours = 1;
-
-        const rankCmd = {
-            owner: '/mo',
-            moderator: '/m',
-            member: '/mb',
-        };
-
-        if (!rankCmd[rank]) return;
-
-        await this.sendPC(userId, `${rankCmd[rank]}${hours}`);
     }
 
     /**
@@ -468,25 +347,4 @@ export class Bot {
         }), this, 900000);
     }
 
-    /**
-     * Checks if a user has enough permissions.
-     * @param {number} uid - User ID
-     * @param {string} from - Source (main, pc, pm)
-     * @returns {boolean} - True or False
-     */
-    hasPermission (uid, from) {
-        const hasPermission = this.state.envData.owners?.includes(Number(uid));
-
-        if (!hasPermission) {
-            this.reply(
-                "You can not use this command.",
-                uid,
-                from === "main" ? "pm" : from
-            );
-
-            return false;
-        }
-
-        return true;
-    }
 }
