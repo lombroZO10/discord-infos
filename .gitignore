@@ -1,0 +1,25 @@
+# Logs
+logs/
+logs/*
+*.log
+
+# Cache
+cache/
+cache/*
+
+# Environment
+.env
+
+# Node
+node_modules/
+node_modules/*
+package-lock.json
+yarn.lock
+
+# Database
+database.db
+*.db
+
+# Login/session
+login.json
+cache/login.json
