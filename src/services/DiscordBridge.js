@@ -9,8 +9,29 @@ import {
 import { DiscordControlPanel } from "./DiscordControlPanel.js";
 import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
 
-const DISCORD_MESSAGE_LIMIT = 2_000;
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
+const EMBED_DESCRIPTION_LIMIT = 4_096;
+
+const displayNameFor = (message) => (
+    message.nickname || message.regname || message.userId || "Usuário desconhecido"
+);
+
+const matchSummary = (matches) => [
+    matches.keywords.length
+        ? `🔑 **Palavras-chave:** ${matches.keywords.map((entry) => escapeMarkdown(entry)).join(", ")}`
+        : null,
+    matches.nicknames.length
+        ? `👤 **Nicks monitorados:** ${matches.nicknames.map((entry) => escapeMarkdown(entry)).join(", ")}`
+        : null,
+].filter(Boolean).join("\n");
+
+const alertColor = (matches) => (
+    matches.keywords.length && matches.nicknames.length
+        ? 0xED4245
+        : matches.nicknames.length
+            ? 0x9B59B6
+            : 0xF1C40F
+);
 
 export class DiscordBridge {
     constructor(config, logger, client = null, store = null) {
@@ -115,21 +136,15 @@ export class DiscordBridge {
     relayXatMessage(message) {
         if (!this.channel) return Promise.resolve(false);
 
-        const displayName = message.nickname || message.regname || message.userId;
-        const header = `**${escapeMarkdown(displayName)}** \`(${message.userId})\``;
-        const availableLength = Math.max(
-            0,
-            DISCORD_MESSAGE_LIMIT - header.length - 1
-        );
-        const text = message.text.slice(0, availableLength);
         const matches = this.store.match(message);
+        if (!matches.matched) return Promise.resolve(false);
 
         this.queue = this.queue
             .then(async () => {
                 let delivered = false;
                 try {
                     await this.channel?.send({
-                        content: `${header}\n${text}`,
+                        embeds: [this.publicAlertEmbed(message, matches)],
                         allowedMentions: { parse: [] },
                     });
                     delivered = true;
@@ -139,11 +154,39 @@ export class DiscordBridge {
                     );
                 }
 
-                if (matches.matched) await this.sendAlert(message, matches);
+                await this.sendAlert(message, matches);
                 return delivered;
             });
 
         return this.queue;
+    }
+
+    publicAlertEmbed(message, matches) {
+        const displayName = escapeMarkdown(displayNameFor(message));
+        const safeText = escapeMarkdown(message.text || "").slice(
+            0,
+            EMBED_DESCRIPTION_LIMIT - 8
+        );
+
+        return new EmbedBuilder()
+            .setColor(alertColor(matches))
+            .setAuthor({ name: "XAT SENTINEL  •  DETECÇÃO EM TEMPO REAL" })
+            .setTitle("🔎 Correspondência detectada")
+            .setDescription(`>>> ${safeText}`)
+            .addFields(
+                {
+                    name: "👤 Usuário",
+                    value: `**${displayName}**\n\`ID ${message.userId || "desconhecido"}\``,
+                    inline: true,
+                },
+                {
+                    name: "🎯 Regra acionada",
+                    value: matchSummary(matches).slice(0, 1_024),
+                    inline: true,
+                }
+            )
+            .setFooter({ text: "Monitoramento seletivo • somente regras configuradas" })
+            .setTimestamp();
     }
 
     async sendAlert(message, matches) {
@@ -151,32 +194,29 @@ export class DiscordBridge {
 
         try {
             this.ownerUser ||= await this.client.users.fetch(this.config.ownerId);
-            const displayName = message.nickname || message.regname || message.userId;
-            const reasons = [
-                matches.keywords.length
-                    ? `Palavras: ${matches.keywords.join(", ")}`
-                    : null,
-                matches.nicknames.length
-                    ? `Nicks: ${matches.nicknames.join(", ")}`
-                    : null,
-            ].filter(Boolean).join("\n");
+            const displayName = escapeMarkdown(displayNameFor(message));
+            const safeText = escapeMarkdown(message.text || "").slice(0, 3_900);
             const embed = new EmbedBuilder()
                 .setColor(0xED4245)
-                .setTitle("Alerta de monitoramento do xat")
+                .setAuthor({ name: "XAT SENTINEL  •  ALERTA PRIVADO" })
+                .setTitle("🚨 Atividade monitorada detectada")
+                .setDescription(
+                    "Uma regra configurada foi acionada no xat.\n\n"
+                    + `>>> ${safeText}`
+                )
                 .addFields(
                     {
-                        name: "Usuário",
-                        value: `${escapeMarkdown(displayName)} (${message.userId})`.slice(0, 1_024),
+                        name: "👤 Identidade",
+                        value: `**${displayName}**\n\`ID ${message.userId || "desconhecido"}\``,
+                        inline: true,
                     },
                     {
-                        name: "Correspondência",
-                        value: escapeMarkdown(reasons).slice(0, 1_024),
-                    },
-                    {
-                        name: "Mensagem",
-                        value: message.text.slice(0, 1_024),
+                        name: "🎯 Motivo do alerta",
+                        value: matchSummary(matches).slice(0, 1_024),
+                        inline: true,
                     }
                 )
+                .setFooter({ text: "Alerta confidencial • XAT Sentinel" })
                 .setTimestamp();
 
             await this.ownerUser.send({

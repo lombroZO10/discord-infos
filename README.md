@@ -8,7 +8,7 @@ Esta versão não possui comandos e não envia mensagens automáticas, mensagens
 
 - Filtros de moderação configurados no banco SQLite
 - Rastreamento de entrada e saída de usuários
-- Encaminhamento de mensagens públicas do xat para o Discord
+- Monitoramento seletivo de mensagens públicas do xat no Discord
 - Reconexão e tratamento de erros
 - Ping e keepalive da conexão
 - WebSocket compatível com o serviço de bots do xat
@@ -51,9 +51,9 @@ Quando `BOT_NICK` ou `BOT_AVATAR` estiver preenchido, o valor correspondente def
 
 ## Ponte xat para Discord
 
-A integração é estritamente de mão única: mensagens públicas recebidas no xat são encaminhadas ao canal configurado, com nome visível e ID do usuário. O Discord não envia mensagens, comandos ou ações de volta ao xat.
+A integração é estritamente de mão única. Uma mensagem pública do xat somente aparece no canal configurado quando corresponde a uma palavra-chave ou nick monitorado. Mensagens que não acionam uma regra são ignoradas. O Discord não envia mensagens, comandos ou ações de volta ao xat.
 
-Pacotes de sistema, texto vazio e mensagens internas iniciadas por `/` não são encaminhados. As mensagens seguem uma fila para preservar a ordem, são limitadas a 2.000 caracteres e não geram menções de usuários, cargos, `@here` ou `@everyone`.
+Pacotes de sistema, texto vazio e mensagens internas iniciadas por `/` não são monitorados. As detecções seguem uma fila para preservar a ordem, são exibidas em embeds e não geram menções de usuários, cargos, `@here` ou `@everyone`.
 
 O bot do Discord precisa conseguir visualizar o canal, enviar mensagens e ler o histórico de mensagens para recuperar o painel já publicado. Como ele não lê mensagens do Discord, o intent privilegiado **Message Content** não é necessário. Se o Discord estiver indisponível ou mal configurado, o bot do xat continua seu fluxo normal e registra o erro.
 

@@ -19,9 +19,9 @@ const IDS = {
 };
 
 const listEntries = (entries) => {
-    if (entries.length === 0) return "Nenhum item configurado.";
+    if (entries.length === 0) return "```ansi\n\u001b[2;30mNenhum item configurado\u001b[0m\n```";
     const value = entries
-        .map((entry) => `• ${escapeMarkdown(entry)}`)
+        .map((entry, index) => `\`${String(index + 1).padStart(2, "0")}\`  ${escapeMarkdown(entry)}`)
         .join("\n");
     return value.slice(0, 1_024);
 };
@@ -90,7 +90,8 @@ export class DiscordControlPanel {
             const entries = await this.store.replace(type, value);
             await this.refresh();
             await interaction.editReply(
-                `${type === "keywords" ? "Palavras-chave" : "Nicks"} atualizados: ${entries.length}.`
+                `✅ **${type === "keywords" ? "Palavras-chave" : "Nicks"} atualizados.** `
+                + `${entries.length} ${entries.length === 1 ? "regra ativa" : "regras ativas"}.`
             );
         }
     }
@@ -102,35 +103,48 @@ export class DiscordControlPanel {
     payload() {
         const state = this.store.snapshot();
         const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle("Monitoramento do xat")
+            .setColor(0x00D4AA)
+            .setAuthor({ name: "XAT SENTINEL  •  SISTEMA DE INTELIGÊNCIA" })
+            .setTitle("🛰️ Central de Monitoramento")
             .setDescription(
-                "Todas as mensagens públicas são encaminhadas para este canal. "
-                + "Correspondências abaixo também geram um alerta privado."
+                "**Controle exatamente o que merece sua atenção.**\n"
+                + "O sistema ignora o restante da conversa e publica somente mensagens que "
+                + "acionarem uma das regras abaixo. Cada detecção também gera um alerta privado."
             )
             .addFields(
                 {
-                    name: `Palavras-chave (${state.keywords.length})`,
+                    name: "◈ STATUS DO SISTEMA",
+                    value: "```ansi\n\u001b[2;32m● ONLINE\u001b[0m  │  FILTRO SELETIVO ATIVO\n```",
+                },
+                {
+                    name: `🔑 PALAVRAS-CHAVE  •  ${state.keywords.length} ATIVAS`,
                     value: listEntries(state.keywords),
                     inline: true,
                 },
                 {
-                    name: `Nicks monitorados (${state.nicknames.length})`,
+                    name: `👤 NICKS MONITORADOS  •  ${state.nicknames.length} ATIVOS`,
                     value: listEntries(state.nicknames),
                     inline: true,
+                },
+                {
+                    name: "🛡️ PROTEÇÃO",
+                    value: "Sem menções automáticas • Sem comandos para o xat • Acesso exclusivo do responsável",
                 }
             )
-            .setFooter({ text: "Configuração restrita ao responsável do bot." });
+            .setFooter({ text: "XAT Sentinel • alterações aplicadas instantaneamente" })
+            .setTimestamp();
 
         const buttons = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(IDS.keywordButton)
-                .setLabel("Configurar palavras")
-                .setStyle(ButtonStyle.Primary),
+                .setLabel("Gerenciar palavras")
+                .setEmoji("🔑")
+                .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId(IDS.nicknameButton)
-                .setLabel("Configurar nicks")
-                .setStyle(ButtonStyle.Secondary)
+                .setLabel("Gerenciar nicks")
+                .setEmoji("👤")
+                .setStyle(ButtonStyle.Primary)
         );
 
         return {
@@ -146,7 +160,11 @@ export class DiscordControlPanel {
         const input = new TextInputBuilder()
             .setCustomId(IDS.input)
             .setLabel(isKeywords ? "Palavras-chave" : "Nicks")
-            .setPlaceholder("Um item por linha; deixe vazio para limpar.")
+            .setPlaceholder(
+                isKeywords
+                    ? "Ex.: promoção (uma palavra ou frase por linha)"
+                    : "Ex.: SeiLahNick (um nick por linha)"
+            )
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
             .setMaxLength(4_000);

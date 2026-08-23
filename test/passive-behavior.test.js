@@ -187,11 +187,18 @@ test("SQLite remains the fallback when avatar and home variables are absent", as
     assert.equal(sent[0][1].h, "https://xat.com/DatabaseHome");
 });
 
-test("the Discord bridge preserves order, size and disables mentions", async () => {
+test("the Discord bridge publishes matching messages as safe embeds in order", async () => {
     const sent = [];
     const logger = { info() {}, warn() {}, error() {} };
     const client = { on() {}, destroy() {} };
-    const bridge = new DiscordBridge({}, logger, client);
+    const store = {
+        match: () => ({
+            matched: true,
+            keywords: ["alerta"],
+            nicknames: [],
+        }),
+    };
+    const bridge = new DiscordBridge({}, logger, client, store);
     bridge.channel = {
         send: async (payload) => sent.push(payload),
     };
@@ -212,10 +219,30 @@ test("the Discord bridge preserves order, size and disables mentions", async () 
     assert.equal(await first, true);
     assert.equal(await second, true);
     assert.equal(sent.length, 2);
-    assert.ok(sent[0].content.length <= 2_000);
-    assert.match(sent[0].content, /Nog/);
+    assert.equal(sent[0].content, undefined);
+    assert.ok(sent[0].embeds[0].toJSON().description.length <= 4_096);
+    assert.match(sent[0].embeds[0].toJSON().fields[0].value, /Nog/);
     assert.deepEqual(sent[0].allowedMentions, { parse: [] });
-    assert.match(sent[1].content, /Second/);
+    assert.match(sent[1].embeds[0].toJSON().fields[0].value, /Second/);
+});
+
+test("the Discord bridge ignores every xat message that does not match a rule", async () => {
+    const sent = [];
+    const bridge = new DiscordBridge({}, {
+        info() {}, warn() {}, error() {},
+    }, { on() {}, destroy() {} }, {
+        match: () => ({ matched: false, keywords: [], nicknames: [] }),
+    });
+    bridge.channel = {
+        send: async (payload) => sent.push(payload),
+    };
+
+    assert.equal(await bridge.relayXatMessage({
+        userId: "123",
+        nickname: "Pessoa",
+        text: "conversa comum",
+    }), false);
+    assert.equal(sent.length, 0);
 });
 
 test("the Discord bridge can stay disabled without affecting the xat bot", async () => {
@@ -309,7 +336,11 @@ test("a monitored xat message is relayed publicly and alerted privately", async 
 
     assert.equal(publicMessages.length, 1);
     assert.equal(privateMessages.length, 1);
+    const publicAlert = publicMessages[0].embeds[0].toJSON();
     const alert = privateMessages[0].embeds[0].toJSON();
+    assert.match(publicAlert.title, /Correspondência/);
+    assert.match(publicAlert.description, /mensagem monitorada/);
+    assert.match(alert.title, /Atividade monitorada/);
     assert.match(alert.fields[1].value, /Sim/);
     assert.match(alert.fields[1].value, /SeiLahNick/);
     assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
@@ -411,7 +442,9 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
 
     await panel.start();
     assert.equal(state.panelMessageId, "999");
-    assert.match(panel.payload().embeds[0].toJSON().fields[0].value, /Sim/);
+    const keywordField = panel.payload().embeds[0].toJSON().fields
+        .find((field) => field.name.includes("PALAVRAS-CHAVE"));
+    assert.match(keywordField.value, /Sim/);
 
     await panel.handleInteraction({
         customId: "xat-monitor:keywords",
