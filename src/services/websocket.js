@@ -26,8 +26,8 @@ export function WebSocketData(bot, room = 0) {
     //  Websocket got a message
     ws.on("message", async (data) => {
         try {
-            bot.logger.info(`<< ${data}`);
             const packets = xmlToArray(data.toString());
+            bot.logger.info(`<< ${packets.map(([type]) => type).join(", ")}`);
             for (const [type, packet] of packets) {
                 await bot.packetHandler.handle(type, packet);
             }

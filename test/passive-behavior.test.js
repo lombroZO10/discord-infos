@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import Handlers from "../src/handlers/_all.js";
 import ChatConnectionHandler from "../src/handlers/ChatConnectionHandler.js";
 import MessageHandler from "../src/handlers/MessageHandler.js";
 import UserJoinedHandler from "../src/handlers/UserJoinedHandler.js";
+import { DiscordBridge } from "../src/services/DiscordBridge.js";
+import { DiscordControlPanel } from "../src/services/DiscordControlPanel.js";
+import { DiscordMonitorStore } from "../src/services/DiscordMonitorStore.js";
 
 const createConnectedBot = (profile = {}) => {
     const sent = [];
@@ -43,9 +48,17 @@ test("private messages are not registered for processing", () => {
 
 test("a former command is treated as an ordinary public message", async () => {
     const moderated = [];
+    const relayed = [];
     const bot = {
         state: {
             settings: { modFilters: true },
+            getUser: () => ({
+                getNick: () => "Visitor",
+                getRegname: () => "visitor",
+            }),
+        },
+        discordBridge: {
+            relayXatMessage: (message) => relayed.push(message),
         },
         moderationFilters: async (userId, message) => {
             moderated.push([userId, message]);
@@ -55,6 +68,30 @@ test("a former command is treated as an ordinary public message", async () => {
     await MessageHandler.execute(bot, { u: "123", t: "!ping" });
 
     assert.deepEqual(moderated, [[123, "!ping"]]);
+    assert.deepEqual(relayed, [{
+        userId: "123",
+        nickname: "Visitor",
+        regname: "visitor",
+        text: "!ping",
+    }]);
+});
+
+test("system and slash-prefixed xat packets are not relayed", async () => {
+    const relayed = [];
+    const bot = {
+        state: {
+            settings: { modFilters: false },
+            getUser: () => undefined,
+        },
+        discordBridge: {
+            relayXatMessage: (message) => relayed.push(message),
+        },
+    };
+
+    await MessageHandler.execute(bot, { u: "123", t: "system", s: "1" });
+    await MessageHandler.execute(bot, { u: "123", t: "/internal" });
+
+    assert.deepEqual(relayed, []);
 });
 
 test("joining updates the user cache without sending a welcome message", async () => {
@@ -81,6 +118,17 @@ test("the bot core exposes no chat-message sending helpers", async () => {
 
     assert.doesNotMatch(source, /async\s+(?:reply|sendMessage|sendPM|sendPC)\s*\(/);
     assert.doesNotMatch(source, /this\.send\(["'](?:m|p)["']/);
+});
+
+test("protocol logs do not include packet payloads or credentials", async () => {
+    const botSource = await readFile(new URL("../src/core/Bot.js", import.meta.url), "utf8");
+    const websocketSource = await readFile(
+        new URL("../src/services/websocket.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.doesNotMatch(botSource, /logger\.info\(`>> \$\{packet\}`\)/);
+    assert.doesNotMatch(websocketSource, /logger\.info\(`<< \$\{data\}`\)/);
 });
 
 test("the runtime has no OpenAI integration", async () => {
@@ -137,4 +185,258 @@ test("SQLite remains the fallback when avatar and home variables are absent", as
 
     assert.equal(sent[0][1].a, "171#");
     assert.equal(sent[0][1].h, "https://xat.com/DatabaseHome");
+});
+
+test("the Discord bridge preserves order, size and disables mentions", async () => {
+    const sent = [];
+    const logger = { info() {}, warn() {}, error() {} };
+    const client = { on() {}, destroy() {} };
+    const bridge = new DiscordBridge({}, logger, client);
+    bridge.channel = {
+        send: async (payload) => sent.push(payload),
+    };
+
+    const first = bridge.relayXatMessage({
+        userId: "123",
+        nickname: "**Nog**",
+        regname: "nog",
+        text: `@everyone ${"x".repeat(2_100)}`,
+    });
+    const second = bridge.relayXatMessage({
+        userId: "456",
+        nickname: "Second",
+        regname: "second",
+        text: "message",
+    });
+
+    assert.equal(await first, true);
+    assert.equal(await second, true);
+    assert.equal(sent.length, 2);
+    assert.ok(sent[0].content.length <= 2_000);
+    assert.match(sent[0].content, /Nog/);
+    assert.deepEqual(sent[0].allowedMentions, { parse: [] });
+    assert.match(sent[1].content, /Second/);
+});
+
+test("the Discord bridge can stay disabled without affecting the xat bot", async () => {
+    const warnings = [];
+    const logger = {
+        info() {},
+        warn: (message) => warnings.push(message),
+        error() {},
+    };
+    const client = { on() {}, destroy() {} };
+    const bridge = new DiscordBridge({
+        token: null,
+        channelId: null,
+        activity: "xat.com",
+    }, logger, client);
+
+    assert.equal(await bridge.start(), false);
+    assert.equal(await bridge.relayXatMessage({}), false);
+    assert.equal(warnings.length, 1);
+});
+
+test("monitor settings persist and match whole keywords and normalized nicks", async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "xat-monitor-"));
+    const file = join(directory, "monitor.json");
+    t.after(() => rm(directory, { recursive: true, force: true }));
+
+    const store = new DiscordMonitorStore(file);
+    await store.load();
+    await store.replace("keywords", "Sim\nOFERTA\nsim");
+    await store.replace("nicknames", "SeiLahNick");
+
+    const keywordMatch = store.match({
+        text: "Ele disse SIM!",
+        nickname: "OutroNick",
+        regname: "outro",
+    });
+    const noPartialMatch = store.match({
+        text: "Uma coisa simples",
+        nickname: "OutroNick",
+        regname: "outro",
+    });
+    const nicknameMatch = store.match({
+        text: "Mensagem comum",
+        nickname: "SeiLahNick#r",
+        regname: "registro",
+    });
+
+    assert.deepEqual(keywordMatch.keywords, ["Sim"]);
+    assert.equal(noPartialMatch.matched, false);
+    assert.deepEqual(nicknameMatch.nicknames, ["SeiLahNick"]);
+
+    const reloaded = new DiscordMonitorStore(file);
+    await reloaded.load();
+    assert.deepEqual(reloaded.snapshot().keywords, ["Sim", "OFERTA"]);
+    assert.deepEqual(reloaded.snapshot().nicknames, ["SeiLahNick"]);
+});
+
+test("a monitored xat message is relayed publicly and alerted privately", async () => {
+    const publicMessages = [];
+    const privateMessages = [];
+    const logger = { info() {}, warn() {}, error() {} };
+    const client = {
+        on() {},
+        destroy() {},
+        users: {
+            fetch: async () => ({
+                send: async (payload) => privateMessages.push(payload),
+            }),
+        },
+    };
+    const store = {
+        match: () => ({
+            matched: true,
+            keywords: ["Sim"],
+            nicknames: ["SeiLahNick"],
+        }),
+    };
+    const bridge = new DiscordBridge({
+        ownerId: "123456789012345678",
+    }, logger, client, store);
+    bridge.channel = {
+        send: async (payload) => publicMessages.push(payload),
+    };
+
+    assert.equal(await bridge.relayXatMessage({
+        userId: "123",
+        nickname: "SeiLahNick",
+        regname: "registro",
+        text: "Sim, mensagem monitorada",
+    }), true);
+
+    assert.equal(publicMessages.length, 1);
+    assert.equal(privateMessages.length, 1);
+    const alert = privateMessages[0].embeds[0].toJSON();
+    assert.match(alert.fields[1].value, /Sim/);
+    assert.match(alert.fields[1].value, /SeiLahNick/);
+    assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
+});
+
+test("an invalid owner ID disables private alerts without disabling public relay", async () => {
+    const publicMessages = [];
+    const errors = [];
+    let readyHandler;
+    const client = {
+        on() {},
+        once: (_event, handler) => { readyHandler = handler; },
+        login: async () => { readyHandler(); },
+        destroy() {},
+        channels: {
+            fetch: async () => ({
+                isSendable: () => true,
+                send: async (payload) => publicMessages.push(payload),
+            }),
+        },
+        users: {
+            fetch: async () => { throw new Error("should not fetch owner"); },
+        },
+        user: {
+            tag: "Bridge#0001",
+            setPresence() {},
+        },
+    };
+    const store = {
+        load: async () => {},
+        match: () => ({
+            matched: true,
+            keywords: ["Sim"],
+            nicknames: [],
+        }),
+    };
+    const bridge = new DiscordBridge({
+        token: "test-token",
+        channelId: "1222348975726657547",
+        ownerId: "invalid",
+        activity: "xat.com",
+    }, {
+        info() {},
+        warn() {},
+        error: (message) => errors.push(message),
+    }, client, store);
+
+    assert.equal(await bridge.start(), true);
+    assert.equal(await bridge.relayXatMessage({
+        userId: "123",
+        nickname: "Pessoa",
+        text: "Sim",
+    }), true);
+
+    assert.equal(bridge.config.ownerId, null);
+    assert.equal(publicMessages.length, 1);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /DISCORD_OWNER_ID inválido/);
+});
+
+test("the Discord control panel is persistent and restricted to the owner", async () => {
+    const state = {
+        panelMessageId: null,
+        keywords: ["Sim"],
+        nicknames: ["SeiLahNick"],
+    };
+    const edits = [];
+    const replies = [];
+    const modals = [];
+    const store = {
+        snapshot: () => ({
+            panelMessageId: state.panelMessageId,
+            keywords: [...state.keywords],
+            nicknames: [...state.nicknames],
+        }),
+        setPanelMessageId: async (id) => {
+            state.panelMessageId = id;
+        },
+        replace: async (type, value) => {
+            state[type] = value ? value.split("\n") : [];
+            return state[type];
+        },
+    };
+    const message = {
+        id: "999",
+        edit: async (payload) => edits.push(payload),
+    };
+    const channel = {
+        messages: { fetch: async () => { throw new Error("missing"); } },
+        send: async () => message,
+    };
+    const panel = new DiscordControlPanel({
+        client: {},
+        channel,
+        ownerId: "123",
+        store,
+        logger: { warn() {}, error() {}, info() {} },
+    });
+
+    await panel.start();
+    assert.equal(state.panelMessageId, "999");
+    assert.match(panel.payload().embeds[0].toJSON().fields[0].value, /Sim/);
+
+    await panel.handleInteraction({
+        customId: "xat-monitor:keywords",
+        user: { id: "unauthorized" },
+        reply: async (payload) => replies.push(payload),
+    });
+    assert.equal(replies.length, 1);
+
+    await panel.handleInteraction({
+        customId: "xat-monitor:keywords",
+        user: { id: "123" },
+        isButton: () => true,
+        showModal: async (modal) => modals.push(modal.toJSON()),
+    });
+    assert.equal(modals[0].custom_id, "xat-monitor:keywords-modal");
+
+    await panel.handleInteraction({
+        customId: "xat-monitor:nicknames-modal",
+        user: { id: "123" },
+        isButton: () => false,
+        isModalSubmit: () => true,
+        fields: { getTextInputValue: () => "NovoNick" },
+        deferReply: async () => {},
+        editReply: async (content) => replies.push(content),
+    });
+    assert.deepEqual(state.nicknames, ["NovoNick"]);
+    assert.ok(edits.length >= 1);
 });

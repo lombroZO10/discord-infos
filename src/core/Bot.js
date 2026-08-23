@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import { setupLogger } from "../services/logger.js";
+import { DiscordBridge } from "../services/DiscordBridge.js";
 import { BotState } from "../services/state.js";
 import { WebSocketData } from "../services/websocket.js";
 import { XatBlogAPI } from "../api/XatBlogAPI.js";
@@ -16,6 +17,7 @@ export class Bot {
         this.state = new BotState();
 
         this.xatBlogAPI = new XatBlogAPI();
+        this.discordBridge = new DiscordBridge(this.state.envData.discord, this.logger);
 
         this.packetHandler = new PacketHandler(this);
 
@@ -37,6 +39,11 @@ export class Bot {
 
             await this.getChatInfo();
             await this.packetHandler.init();
+
+            void this.discordBridge.start().catch((error) => {
+                this.logger.error(`[discord] Falha ao iniciar: ${error.message}`);
+                this.discordBridge.stop();
+            });
 
             try {
                 const data = await fs.readFile('./badwords.json', 'utf-8');
@@ -101,7 +108,7 @@ export class Bot {
                 }
             }
             packet += packet.endsWith(" ") ? "/>" : " />";
-            this.logger.info(`>> ${packet}`);
+            this.logger.info(`>> <${name} />`);
             this.state.ws.send(packet + "\x00");
         } catch (error) {
             this.logger.error(`Send error: ${error.message} - ${error.stack}`);

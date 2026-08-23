@@ -20,6 +20,10 @@ yarn.lock
 database.db
 *.db
 
+# Discord monitor state
+data/
+data/*
+
 # Login/session
 login.json
 cache/login.json

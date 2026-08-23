@@ -8,6 +8,7 @@ Esta versão não possui comandos e não envia mensagens automáticas, mensagens
 
 - Filtros de moderação configurados no banco SQLite
 - Rastreamento de entrada e saída de usuários
+- Encaminhamento de mensagens públicas do xat para o Discord
 - Reconexão e tratamento de erros
 - Ping e keepalive da conexão
 - WebSocket compatível com o serviço de bots do xat
@@ -37,11 +38,28 @@ CHAT_LANGUAGE=all
 DISABLED_POWERS=[29]
 WEBSOCKET_URL=wss://bots.xat.com/v2
 WEBSOCKET_ORIGIN=https://xat.com
+DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_CHANNEL_ID=123456789012345678
+DISCORD_OWNER_ID=123456789012345678
+DISCORD_ACTIVITY=xat.com
+DISCORD_CONFIG_FILE=./data/discord-monitor.json
 ```
 
 Quando `BOT_NICK` ou `BOT_AVATAR` estiver preenchido, o valor correspondente define o nome ou avatar exibido pelo bot. Se uma dessas variáveis for omitida ou estiver vazia, o valor salvo no SQLite será usado como fallback.
 
 `BOT_HOME` define o link da casinha. Uma variável presente e vazia (`BOT_HOME=`) remove o link; se ela for omitida do `.env`, o valor salvo no SQLite será mantido.
+
+## Ponte xat para Discord
+
+A integração é estritamente de mão única: mensagens públicas recebidas no xat são encaminhadas ao canal configurado, com nome visível e ID do usuário. O Discord não envia mensagens, comandos ou ações de volta ao xat.
+
+Pacotes de sistema, texto vazio e mensagens internas iniciadas por `/` não são encaminhados. As mensagens seguem uma fila para preservar a ordem, são limitadas a 2.000 caracteres e não geram menções de usuários, cargos, `@here` ou `@everyone`.
+
+O bot do Discord precisa conseguir visualizar o canal, enviar mensagens e ler o histórico de mensagens para recuperar o painel já publicado. Como ele não lê mensagens do Discord, o intent privilegiado **Message Content** não é necessário. Se o Discord estiver indisponível ou mal configurado, o bot do xat continua seu fluxo normal e registra o erro.
+
+Ao conectar, o bot cria ou recupera no canal um painel com dois botões: **Configurar palavras** e **Configurar nicks**. Somente a conta definida em `DISCORD_OWNER_ID` pode usar os controles. Cada modal aceita um item por linha; enviar o campo vazio limpa aquela lista.
+
+Palavras-chave são comparadas como palavras ou frases completas, sem diferenciar maiúsculas e minúsculas. Nicks são comparados sem diferenciar maiúsculas e minúsculas e desconsideram formatação comum do xat. Quando houver correspondência, `DISCORD_OWNER_ID` recebe no privado um embed com usuário, motivo e mensagem. O estado fica em `DISCORD_CONFIG_FILE` e não é versionado.
 
 ## Execução
 

@@ -16,6 +16,14 @@ export default {
 
         if (!message) return;
 
+        const user = bot.state.getUser(userID);
+        void bot.discordBridge?.relayXatMessage({
+            userId: userID.toString(),
+            nickname: user?.getNick(),
+            regname: user?.getRegname(),
+            text: message,
+        });
+
         if (bot.state.settings.modFilters)
             await bot.moderationFilters(userID, message);
     },
