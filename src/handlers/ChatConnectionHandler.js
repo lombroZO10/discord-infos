@@ -69,7 +69,8 @@ export default {
         j2Packet.dx = bot.state.loginInfo.dx || false;
         j2Packet.dt = bot.state.loginInfo.dt || false;
         j2Packet.N = bot.state.loginInfo.n;
-        j2Packet.n = `${bot.state.settings.nick}##${bot.state.settings.status}`;
+        const nick = bot.state.envData.nick || bot.state.settings.nick;
+        j2Packet.n = `${nick}##${bot.state.settings.status}`;
         j2Packet.a = `${bot.state.settings.avatar}#${bot.state.settings.pcback}`;
         j2Packet.h = bot.state.settings.home;
         j2Packet.v = bot.state.loginInfo.d1 ? 1 : 0;

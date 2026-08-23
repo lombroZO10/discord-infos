@@ -3,8 +3,39 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import Handlers from "../src/handlers/_all.js";
+import ChatConnectionHandler from "../src/handlers/ChatConnectionHandler.js";
 import MessageHandler from "../src/handlers/MessageHandler.js";
 import UserJoinedHandler from "../src/handlers/UserJoinedHandler.js";
+
+const createConnectedBot = (envNick) => {
+    const sent = [];
+    const bot = {
+        state: {
+            isLoggingIn: false,
+            envData: {
+                disabledPowers: [],
+                nick: envNick,
+            },
+            loginInfo: {
+                i: "123",
+                k1: "session-key",
+                n: "registered-name",
+            },
+            chatInfo: { id: "456" },
+            settings: {
+                nick: "DatabaseNick",
+                status: "Available",
+                avatar: "171",
+                pcback: "",
+                home: "",
+                stealth: "disable",
+            },
+        },
+        send: async (name, data) => sent.push([name, data]),
+    };
+
+    return { bot, sent };
+};
 
 test("private messages are not registered for processing", () => {
     assert.equal(Handlers.some((handler) => handler.name === "p"), false);
@@ -50,4 +81,21 @@ test("the bot core exposes no chat-message sending helpers", async () => {
 
     assert.doesNotMatch(source, /async\s+(?:reply|sendMessage|sendPM|sendPC)\s*\(/);
     assert.doesNotMatch(source, /this\.send\(["'](?:m|p)["']/);
+});
+
+test("BOT_NICK overrides the nickname stored in SQLite", async () => {
+    const { bot, sent } = createConnectedBot("Nog");
+
+    await ChatConnectionHandler.execute(bot, { i: "connection-id", c: "callback" });
+
+    assert.equal(sent[0][0], "j2");
+    assert.equal(sent[0][1].n, "Nog##Available");
+});
+
+test("the SQLite nickname remains the fallback when BOT_NICK is empty", async () => {
+    const { bot, sent } = createConnectedBot(null);
+
+    await ChatConnectionHandler.execute(bot, { i: "connection-id", c: "callback" });
+
+    assert.equal(sent[0][1].n, "DatabaseNick##Available");
 });

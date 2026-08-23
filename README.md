@@ -31,12 +31,15 @@ Copie `.env.example` para `.env` e preencha:
 BOT_USER=your_xat_username
 BOT_APIKEY=your_xat_api_key
 BOT_CHAT=your_chat_name
+BOT_NICK=Bot
 CHAT_LANGUAGE=all
 DISABLED_POWERS=[29]
 WEBSOCKET_URL=wss://bots.xat.com/v2
 WEBSOCKET_ORIGIN=https://xat.com
 OPENAI_KEY=""
 ```
+
+Quando `BOT_NICK` estiver preenchido, ele define o nome exibido pelo bot. Se a variável for omitida ou estiver vazia, o nome salvo no SQLite será usado como fallback.
 
 ## Execução
 

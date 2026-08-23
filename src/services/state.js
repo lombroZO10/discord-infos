@@ -16,6 +16,7 @@ export class BotState {
             username: process.env.BOT_USER,
             apiKey: process.env.BOT_APIKEY,
             chat: process.env.BOT_CHAT,
+            nick: process.env.BOT_NICK?.trim() || null,
             language: process.env.CHAT_LANGUAGE,
             websocketUrl: process.env.WEBSOCKET_URL,
             websocketOrigin: process.env.WEBSOCKET_ORIGIN,
