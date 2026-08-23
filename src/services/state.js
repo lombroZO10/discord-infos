@@ -22,7 +22,6 @@ export class BotState {
             language: process.env.CHAT_LANGUAGE,
             websocketUrl: process.env.WEBSOCKET_URL,
             websocketOrigin: process.env.WEBSOCKET_ORIGIN,
-            openaiApiKey: process.env.OPENAI_KEY,
             disabledPowers: JSON.parse(process.env.DISABLED_POWERS),
         };
     }

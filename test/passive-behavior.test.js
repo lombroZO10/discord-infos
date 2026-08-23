@@ -83,6 +83,16 @@ test("the bot core exposes no chat-message sending helpers", async () => {
     assert.doesNotMatch(source, /this\.send\(["'](?:m|p)["']/);
 });
 
+test("the runtime has no OpenAI integration", async () => {
+    const files = await Promise.all([
+        readFile(new URL("../src/core/Bot.js", import.meta.url), "utf8"),
+        readFile(new URL("../src/services/state.js", import.meta.url), "utf8"),
+        readFile(new URL("../src/models/Settings.js", import.meta.url), "utf8"),
+    ]);
+
+    assert.doesNotMatch(files.join("\n"), /openai/i);
+});
+
 test("BOT_NICK overrides the nickname stored in SQLite", async () => {
     const { bot, sent } = createConnectedBot({ nick: "Nog" });
 

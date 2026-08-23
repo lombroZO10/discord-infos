@@ -54,10 +54,6 @@ export const Settings = sequelize.define("settings", {
         type: DataTypes.BOOLEAN,
         defaultValue: true
     },
-    openAiDetect: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: true
-    },
     linkWhitelist: {
         type: DataTypes.STRING,
         defaultValue: "xat.wiki,xatblog.net,xatimg.com,xat.com,google.com,facebook.com,instagram.com,twitter.com,discord.gg,youtube.com"

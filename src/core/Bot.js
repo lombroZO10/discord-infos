@@ -6,7 +6,6 @@ import { XatBlogAPI } from "../api/XatBlogAPI.js";
 import { sanitize, runIfConnected } from "../utils/helpers.js";
 import { PacketHandler } from "./PacketHandler.js";
 import { Settings } from "../models/Settings.js";
-import { OpenAI } from "../api/OpenAI.js";
 
 export class Bot {
     /**
@@ -16,7 +15,6 @@ export class Bot {
         this.logger = setupLogger();
         this.state = new BotState();
 
-        this.OpenAI = new OpenAI(this.state);
         this.xatBlogAPI = new XatBlogAPI();
 
         this.packetHandler = new PacketHandler(this);
@@ -206,7 +204,7 @@ export class Bot {
     }
 
     /**
-     * Moderation filter based on OpenAI.
+     * Applies the configured local moderation filters.
      * @param {number} userId - User ID
      * @param {string} message - Message to check
      */
@@ -222,7 +220,6 @@ export class Bot {
         const spamSmiliesDetect = this.state.settings.spamSmiliesDetect ?? true;
         const maxSmilies = Number(this.state.settings.maxSmilies) || 4;
         const linkDetect = this.state.settings.linkDetect ?? true;
-        const openAiDetect = this.state.settings.openAiDetect ?? true;
         const inappDetect = this.state.settings.inappDetect ?? true;
         const linkWhitelist = (this.state.settings.linkWhitelist || '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -312,20 +309,6 @@ export class Bot {
                     break;
                 }
             }
-        }
-
-        // OpenAI moderation
-        if (!reason && openAiDetect) {
-            try {
-                const result = await this.OpenAI.moderate(message);
-                const flags = this.OpenAI.constructor.parseModerationResult(result);
-                if (flags.isFlagged) {
-                    const flagged = Object.entries(flags)
-                        .filter(([k, v]) => k !== 'isFlagged' && v === true)
-                        .map(([k]) => k.replace(/^is/, ''));
-                    reason = `${flagged.join(', ') || 'No reason'}`;
-                }
-            } catch (e) { }
         }
 
         // Kick if any reason was found

@@ -7,7 +7,6 @@ Esta versão não possui comandos e não envia mensagens automáticas, mensagens
 ## Recursos mantidos
 
 - Filtros de moderação configurados no banco SQLite
-- Moderação opcional via OpenAI
 - Rastreamento de entrada e saída de usuários
 - Reconexão e tratamento de erros
 - Ping e keepalive da conexão
@@ -38,7 +37,6 @@ CHAT_LANGUAGE=all
 DISABLED_POWERS=[29]
 WEBSOCKET_URL=wss://bots.xat.com/v2
 WEBSOCKET_ORIGIN=https://xat.com
-OPENAI_KEY=""
 ```
 
 Quando `BOT_NICK` ou `BOT_AVATAR` estiver preenchido, o valor correspondente define o nome ou avatar exibido pelo bot. Se uma dessas variáveis for omitida ou estiver vazia, o valor salvo no SQLite será usado como fallback.
@@ -61,6 +59,8 @@ npm start
 ## Configuração da moderação
 
 As opções de moderação continuam armazenadas na tabela `settings` do arquivo `database.db`. Como não existem comandos nesta versão, alterações nessas opções devem ser feitas diretamente no banco ou por uma futura interface administrativa.
+
+Todos os filtros de moderação são locais; esta versão não integra nem envia conteúdo para a OpenAI.
 
 ## Segurança
 
