@@ -59,6 +59,8 @@ O bot do Discord precisa conseguir visualizar o canal, enviar mensagens e ler o 
 
 Ao conectar, o bot cria ou recupera no canal um painel com dois botões: **Configurar palavras** e **Configurar nicks**. Somente a conta definida em `DISCORD_OWNER_ID` pode usar os controles. Cada modal aceita um item por linha; enviar o campo vazio limpa aquela lista.
 
+O painel também oferece presets de cor **Realeza**, **Ouro**, **Esmeralda**, **Rubi**, **Royal** e **Gelo**. O tema selecionado é salvo e aplicado ao painel e aos alertas privados. A logo aparece como thumbnail e o banner como imagem principal dos embeds.
+
 Palavras-chave são comparadas como palavras ou frases completas, sem diferenciar maiúsculas e minúsculas. Nicks são comparados sem diferenciar maiúsculas e minúsculas e desconsideram formatação comum do xat. Quando houver correspondência, `DISCORD_OWNER_ID` recebe no privado um embed com usuário, motivo e mensagem. O estado fica em `DISCORD_CONFIG_FILE` e não é versionado.
 
 ## Execução

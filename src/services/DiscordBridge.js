@@ -10,10 +10,13 @@ import {
 import { fileURLToPath } from "node:url";
 import { DiscordControlPanel } from "./DiscordControlPanel.js";
 import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
+import { getDiscordTheme } from "./DiscordThemes.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const LOGO_NAME = "realeza-logo.png";
 const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
+const BANNER_NAME = "realeza-banner.png";
+const BANNER_PATH = fileURLToPath(new URL("../../assets/realeza-banner.png", import.meta.url));
 
 const displayNameFor = (message) => (
     message.nickname || message.regname || message.userId || "Usuário desconhecido"
@@ -149,11 +152,13 @@ export class DiscordBridge {
             this.ownerUser ||= await this.client.users.fetch(this.config.ownerId);
             const displayName = escapeMarkdown(displayNameFor(message));
             const safeText = escapeMarkdown(message.text || "").slice(0, 3_900);
+            const theme = getDiscordTheme(this.store.snapshot?.().theme);
             const embed = new EmbedBuilder()
-                .setColor(0xED4245)
+                .setColor(theme.color)
                 .setAuthor({ name: "XAT SENTINEL  •  ALERTA PRIVADO" })
                 .setTitle("🚨 Atividade monitorada detectada")
                 .setThumbnail(`attachment://${LOGO_NAME}`)
+                .setImage(`attachment://${BANNER_NAME}`)
                 .setDescription(
                     "Uma regra configurada foi acionada no xat.\n\n"
                     + `>>> ${safeText}`
@@ -175,7 +180,10 @@ export class DiscordBridge {
 
             await this.ownerUser.send({
                 embeds: [embed],
-                files: [new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME)],
+                files: [
+                    new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME),
+                    new AttachmentBuilder(BANNER_PATH).setName(BANNER_NAME),
+                ],
                 allowedMentions: { parse: [] },
             });
             return true;

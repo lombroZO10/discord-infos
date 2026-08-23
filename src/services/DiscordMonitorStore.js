@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { DEFAULT_DISCORD_THEME, isDiscordTheme } from "./DiscordThemes.js";
 
 const MAX_ENTRIES = 40;
 const MAX_ENTRY_LENGTH = 80;
@@ -43,8 +44,9 @@ export class DiscordMonitorStore {
     constructor(file = "./data/discord-monitor.json") {
         this.file = resolve(file);
         this.data = {
-            version: 1,
+            version: 2,
             panelMessageId: null,
+            theme: DEFAULT_DISCORD_THEME,
             keywords: [],
             nicknames: [],
         };
@@ -55,10 +57,13 @@ export class DiscordMonitorStore {
         try {
             const stored = JSON.parse(await readFile(this.file, "utf8"));
             this.data = {
-                version: 1,
+                version: 2,
                 panelMessageId: typeof stored.panelMessageId === "string"
                     ? stored.panelMessageId
                     : null,
+                theme: isDiscordTheme(stored.theme)
+                    ? stored.theme
+                    : DEFAULT_DISCORD_THEME,
                 keywords: cleanEntries(stored.keywords),
                 nicknames: cleanEntries(stored.nicknames),
             };
@@ -72,6 +77,7 @@ export class DiscordMonitorStore {
     snapshot() {
         return {
             panelMessageId: this.data.panelMessageId,
+            theme: this.data.theme,
             keywords: [...this.data.keywords],
             nicknames: [...this.data.nicknames],
         };
@@ -90,6 +96,13 @@ export class DiscordMonitorStore {
     async setPanelMessageId(messageId) {
         this.data.panelMessageId = messageId;
         await this.persist();
+    }
+
+    async setTheme(theme) {
+        if (!isDiscordTheme(theme)) throw new Error("Tema do Discord inválido.");
+        this.data.theme = theme;
+        await this.persist();
+        return theme;
     }
 
     match(message) {

@@ -6,20 +6,30 @@ import {
     EmbedBuilder,
     MessageFlags,
     ModalBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder,
     TextInputBuilder,
     TextInputStyle,
     escapeMarkdown,
 } from "discord.js";
 import { fileURLToPath } from "node:url";
+import { DISCORD_THEMES, getDiscordTheme } from "./DiscordThemes.js";
 
 const LOGO_NAME = "realeza-logo.png";
 const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
+const BANNER_NAME = "realeza-banner.png";
+const BANNER_PATH = fileURLToPath(new URL("../../assets/realeza-banner.png", import.meta.url));
+const BRAND_FILES = Object.freeze({
+    [LOGO_NAME]: LOGO_PATH,
+    [BANNER_NAME]: BANNER_PATH,
+});
 
 const IDS = {
     keywordButton: "xat-monitor:keywords",
     nicknameButton: "xat-monitor:nicknames",
     keywordModal: "xat-monitor:keywords-modal",
     nicknameModal: "xat-monitor:nicknames-modal",
+    themeSelect: "xat-monitor:theme",
     input: "xat-monitor:entries",
 };
 
@@ -39,7 +49,7 @@ export class DiscordControlPanel {
         this.store = store;
         this.logger = logger;
         this.message = null;
-        this.hasLogoAttachment = false;
+        this.brandAttachments = new Set();
     }
 
     async start() {
@@ -48,25 +58,24 @@ export class DiscordControlPanel {
         if (panelMessageId) {
             try {
                 this.message = await this.channel.messages.fetch(panelMessageId);
-                this.hasLogoAttachment = Boolean(
-                    this.message.attachments?.find?.((attachment) => attachment.name === LOGO_NAME)
-                );
+                for (const attachment of this.message.attachments?.values?.() || []) {
+                    if (BRAND_FILES[attachment.name]) this.brandAttachments.add(attachment.name);
+                }
             } catch {
                 this.logger.warn("[discord] Painel anterior não foi encontrado; criando outro.");
             }
         }
 
         if (this.message) {
-            const attachLogo = !this.hasLogoAttachment;
-            const editedMessage = await this.message.edit(this.payload({
-                attachLogo,
-                replaceAttachments: attachLogo,
-            }));
+            const missingFiles = Object.keys(BRAND_FILES)
+                .filter((name) => !this.brandAttachments.has(name));
+            const editedMessage = await this.message.edit(this.payload({ files: missingFiles }));
             if (editedMessage) this.message = editedMessage;
-            this.hasLogoAttachment = true;
+            missingFiles.forEach((name) => this.brandAttachments.add(name));
         } else {
-            this.message = await this.channel.send(this.payload({ attachLogo: true }));
-            this.hasLogoAttachment = true;
+            const brandFiles = Object.keys(BRAND_FILES);
+            this.message = await this.channel.send(this.payload({ files: brandFiles }));
+            brandFiles.forEach((name) => this.brandAttachments.add(name));
             await this.store.setPanelMessageId(this.message.id);
         }
     }
@@ -93,6 +102,18 @@ export class DiscordControlPanel {
             return;
         }
 
+        if (interaction.isStringSelectMenu?.() && interaction.customId === IDS.themeSelect) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const themeName = interaction.values[0];
+            await this.store.setTheme(themeName);
+            await this.refresh();
+            const theme = getDiscordTheme(themeName);
+            await interaction.editReply(
+                `${theme.emoji} **Tema ${theme.label} aplicado com sucesso.**`
+            );
+            return;
+        }
+
         if (interaction.isModalSubmit()) {
             const type = interaction.customId === IDS.keywordModal
                 ? "keywords"
@@ -116,13 +137,15 @@ export class DiscordControlPanel {
         if (this.message) await this.message.edit(this.payload());
     }
 
-    payload({ attachLogo = false, replaceAttachments = false } = {}) {
+    payload({ files = [] } = {}) {
         const state = this.store.snapshot();
+        const theme = getDiscordTheme(state.theme);
         const embed = new EmbedBuilder()
-            .setColor(0x00D4AA)
+            .setColor(theme.color)
             .setAuthor({ name: "XAT SENTINEL  •  SISTEMA DE INTELIGÊNCIA" })
             .setTitle("🛰️ Central de Monitoramento")
             .setThumbnail(`attachment://${LOGO_NAME}`)
+            .setImage(`attachment://${BANNER_NAME}`)
             .setDescription(
                 "**Controle exatamente o que merece sua atenção.**\n"
                 + "O sistema ignora o restante da conversa e publica somente mensagens que "
@@ -146,6 +169,10 @@ export class DiscordControlPanel {
                 {
                     name: "🛡️ PROTEÇÃO",
                     value: "Sem menções automáticas • Sem comandos para o xat • Acesso exclusivo do responsável",
+                },
+                {
+                    name: "🎨 VISUAL ATIVO",
+                    value: `${theme.emoji} **${theme.label}** • ${theme.description}`,
                 }
             )
             .setFooter({ text: "XAT Sentinel • alterações aplicadas instantaneamente" })
@@ -163,16 +190,32 @@ export class DiscordControlPanel {
                 .setEmoji("👤")
                 .setStyle(ButtonStyle.Primary)
         );
+        const themeSelect = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId(IDS.themeSelect)
+                .setPlaceholder("Escolha o visual dos embeds")
+                .addOptions(
+                    Object.entries(DISCORD_THEMES).map(([value, preset]) => (
+                        new StringSelectMenuOptionBuilder()
+                            .setLabel(preset.label)
+                            .setDescription(preset.description)
+                            .setEmoji(preset.emoji)
+                            .setValue(value)
+                            .setDefault(value === state.theme)
+                    ))
+                )
+        );
 
         const payload = {
             embeds: [embed],
-            components: [buttons],
+            components: [buttons, themeSelect],
             allowedMentions: { parse: [] },
         };
-        if (attachLogo) {
-            payload.files = [new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME)];
+        if (files.length) {
+            payload.files = files.map((name) => (
+                new AttachmentBuilder(BRAND_FILES[name]).setName(name)
+            ));
         }
-        if (replaceAttachments) payload.attachments = [];
         return payload;
     }
 

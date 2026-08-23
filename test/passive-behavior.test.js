@@ -285,6 +285,7 @@ test("monitor settings persist and match whole keywords and normalized nicks", a
     await store.load();
     await store.replace("keywords", "Sim\nOFERTA\nsim");
     await store.replace("nicknames", "SeiLahNick");
+    await store.setTheme("royal");
 
     const keywordMatch = store.match({
         text: "Ele disse SIM!",
@@ -310,6 +311,7 @@ test("monitor settings persist and match whole keywords and normalized nicks", a
     await reloaded.load();
     assert.deepEqual(reloaded.snapshot().keywords, ["Sim", "OFERTA"]);
     assert.deepEqual(reloaded.snapshot().nicknames, ["SeiLahNick"]);
+    assert.equal(reloaded.snapshot().theme, "royal");
 });
 
 test("a monitored xat message is alerted privately without appearing in the channel", async () => {
@@ -425,6 +427,7 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
     const store = {
         snapshot: () => ({
             panelMessageId: state.panelMessageId,
+            theme: state.theme || "realeza",
             keywords: [...state.keywords],
             nicknames: [...state.nicknames],
         }),
@@ -434,6 +437,10 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
         replace: async (type, value) => {
             state[type] = value ? value.split("\n") : [];
             return state[type];
+        },
+        setTheme: async (theme) => {
+            state.theme = theme;
+            return theme;
         },
     };
     const message = {
@@ -464,15 +471,33 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
         panel.payload().embeds[0].toJSON().thumbnail.url,
         "attachment://realeza-logo.png"
     );
+    assert.equal(
+        panel.payload().embeds[0].toJSON().image.url,
+        "attachment://realeza-banner.png"
+    );
     assert.equal(panelPayloads[0].files[0].name, "realeza-logo.png");
+    assert.equal(panelPayloads[0].files[1].name, "realeza-banner.png");
     assert.equal(panel.payload().files, undefined);
+    assert.equal(panel.payload().components.length, 2);
+
+    await panel.handleInteraction({
+        customId: "xat-monitor:theme",
+        user: { id: "123" },
+        isButton: () => false,
+        isStringSelectMenu: () => true,
+        values: ["rubi"],
+        deferReply: async () => {},
+        editReply: async (content) => replies.push(content),
+    });
+    assert.equal(state.theme, "rubi");
+    assert.equal(panel.payload().embeds[0].toJSON().color, 0xED4245);
 
     await panel.handleInteraction({
         customId: "xat-monitor:keywords",
         user: { id: "unauthorized" },
         reply: async (payload) => replies.push(payload),
     });
-    assert.equal(replies.length, 1);
+    assert.equal(replies.length, 2);
 
     await panel.handleInteraction({
         customId: "xat-monitor:keywords",
