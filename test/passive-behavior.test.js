@@ -187,10 +187,19 @@ test("SQLite remains the fallback when avatar and home variables are absent", as
     assert.equal(sent[0][1].h, "https://xat.com/DatabaseHome");
 });
 
-test("the Discord bridge publishes matching messages as safe embeds in order", async () => {
-    const sent = [];
+test("the Discord bridge sends matching messages only as safe private embeds in order", async () => {
+    const publicMessages = [];
+    const privateMessages = [];
     const logger = { info() {}, warn() {}, error() {} };
-    const client = { on() {}, destroy() {} };
+    const client = {
+        on() {},
+        destroy() {},
+        users: {
+            fetch: async () => ({
+                send: async (payload) => privateMessages.push(payload),
+            }),
+        },
+    };
     const store = {
         match: () => ({
             matched: true,
@@ -198,9 +207,11 @@ test("the Discord bridge publishes matching messages as safe embeds in order", a
             nicknames: [],
         }),
     };
-    const bridge = new DiscordBridge({}, logger, client, store);
+    const bridge = new DiscordBridge({
+        ownerId: "123456789012345678",
+    }, logger, client, store);
     bridge.channel = {
-        send: async (payload) => sent.push(payload),
+        send: async (payload) => publicMessages.push(payload),
     };
 
     const first = bridge.relayXatMessage({
@@ -218,12 +229,13 @@ test("the Discord bridge publishes matching messages as safe embeds in order", a
 
     assert.equal(await first, true);
     assert.equal(await second, true);
-    assert.equal(sent.length, 2);
-    assert.equal(sent[0].content, undefined);
-    assert.ok(sent[0].embeds[0].toJSON().description.length <= 4_096);
-    assert.match(sent[0].embeds[0].toJSON().fields[0].value, /Nog/);
-    assert.deepEqual(sent[0].allowedMentions, { parse: [] });
-    assert.match(sent[1].embeds[0].toJSON().fields[0].value, /Second/);
+    assert.equal(publicMessages.length, 0);
+    assert.equal(privateMessages.length, 2);
+    assert.ok(privateMessages[0].embeds[0].toJSON().description.length <= 4_096);
+    assert.match(privateMessages[0].embeds[0].toJSON().fields[0].value, /Nog/);
+    assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
+    assert.equal(privateMessages[0].files[0].name, "realeza-logo.png");
+    assert.match(privateMessages[1].embeds[0].toJSON().fields[0].value, /Second/);
 });
 
 test("the Discord bridge ignores every xat message that does not match a rule", async () => {
@@ -300,7 +312,7 @@ test("monitor settings persist and match whole keywords and normalized nicks", a
     assert.deepEqual(reloaded.snapshot().nicknames, ["SeiLahNick"]);
 });
 
-test("a monitored xat message is relayed publicly and alerted privately", async () => {
+test("a monitored xat message is alerted privately without appearing in the channel", async () => {
     const publicMessages = [];
     const privateMessages = [];
     const logger = { info() {}, warn() {}, error() {} };
@@ -334,19 +346,18 @@ test("a monitored xat message is relayed publicly and alerted privately", async 
         text: "Sim, mensagem monitorada",
     }), true);
 
-    assert.equal(publicMessages.length, 1);
+    assert.equal(publicMessages.length, 0);
     assert.equal(privateMessages.length, 1);
-    const publicAlert = publicMessages[0].embeds[0].toJSON();
     const alert = privateMessages[0].embeds[0].toJSON();
-    assert.match(publicAlert.title, /Correspondência/);
-    assert.match(publicAlert.description, /mensagem monitorada/);
     assert.match(alert.title, /Atividade monitorada/);
+    assert.match(alert.description, /mensagem monitorada/);
+    assert.equal(alert.thumbnail.url, "attachment://realeza-logo.png");
     assert.match(alert.fields[1].value, /Sim/);
     assert.match(alert.fields[1].value, /SeiLahNick/);
     assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
 });
 
-test("an invalid owner ID disables private alerts without disabling public relay", async () => {
+test("an invalid owner ID disables alerts while leaving the Discord client isolated", async () => {
     const publicMessages = [];
     const errors = [];
     let readyHandler;
@@ -393,10 +404,10 @@ test("an invalid owner ID disables private alerts without disabling public relay
         userId: "123",
         nickname: "Pessoa",
         text: "Sim",
-    }), true);
+    }), false);
 
     assert.equal(bridge.config.ownerId, null);
-    assert.equal(publicMessages.length, 1);
+    assert.equal(publicMessages.length, 0);
     assert.equal(errors.length, 1);
     assert.match(errors[0], /DISCORD_OWNER_ID inválido/);
 });
@@ -408,6 +419,7 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
         nicknames: ["SeiLahNick"],
     };
     const edits = [];
+    const panelPayloads = [];
     const replies = [];
     const modals = [];
     const store = {
@@ -430,7 +442,10 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
     };
     const channel = {
         messages: { fetch: async () => { throw new Error("missing"); } },
-        send: async () => message,
+        send: async (payload) => {
+            panelPayloads.push(payload);
+            return message;
+        },
     };
     const panel = new DiscordControlPanel({
         client: {},
@@ -445,6 +460,12 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
     const keywordField = panel.payload().embeds[0].toJSON().fields
         .find((field) => field.name.includes("PALAVRAS-CHAVE"));
     assert.match(keywordField.value, /Sim/);
+    assert.equal(
+        panel.payload().embeds[0].toJSON().thumbnail.url,
+        "attachment://realeza-logo.png"
+    );
+    assert.equal(panelPayloads[0].files[0].name, "realeza-logo.png");
+    assert.equal(panel.payload().files, undefined);
 
     await panel.handleInteraction({
         customId: "xat-monitor:keywords",

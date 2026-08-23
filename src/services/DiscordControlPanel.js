@@ -1,5 +1,6 @@
 import {
     ActionRowBuilder,
+    AttachmentBuilder,
     ButtonBuilder,
     ButtonStyle,
     EmbedBuilder,
@@ -9,6 +10,10 @@ import {
     TextInputStyle,
     escapeMarkdown,
 } from "discord.js";
+import { fileURLToPath } from "node:url";
+
+const LOGO_NAME = "realeza-logo.png";
+const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
 
 const IDS = {
     keywordButton: "xat-monitor:keywords",
@@ -34,6 +39,7 @@ export class DiscordControlPanel {
         this.store = store;
         this.logger = logger;
         this.message = null;
+        this.hasLogoAttachment = false;
     }
 
     async start() {
@@ -42,15 +48,25 @@ export class DiscordControlPanel {
         if (panelMessageId) {
             try {
                 this.message = await this.channel.messages.fetch(panelMessageId);
+                this.hasLogoAttachment = Boolean(
+                    this.message.attachments?.find?.((attachment) => attachment.name === LOGO_NAME)
+                );
             } catch {
                 this.logger.warn("[discord] Painel anterior não foi encontrado; criando outro.");
             }
         }
 
         if (this.message) {
-            await this.message.edit(this.payload());
+            const attachLogo = !this.hasLogoAttachment;
+            const editedMessage = await this.message.edit(this.payload({
+                attachLogo,
+                replaceAttachments: attachLogo,
+            }));
+            if (editedMessage) this.message = editedMessage;
+            this.hasLogoAttachment = true;
         } else {
-            this.message = await this.channel.send(this.payload());
+            this.message = await this.channel.send(this.payload({ attachLogo: true }));
+            this.hasLogoAttachment = true;
             await this.store.setPanelMessageId(this.message.id);
         }
     }
@@ -100,12 +116,13 @@ export class DiscordControlPanel {
         if (this.message) await this.message.edit(this.payload());
     }
 
-    payload() {
+    payload({ attachLogo = false, replaceAttachments = false } = {}) {
         const state = this.store.snapshot();
         const embed = new EmbedBuilder()
             .setColor(0x00D4AA)
             .setAuthor({ name: "XAT SENTINEL  •  SISTEMA DE INTELIGÊNCIA" })
             .setTitle("🛰️ Central de Monitoramento")
+            .setThumbnail(`attachment://${LOGO_NAME}`)
             .setDescription(
                 "**Controle exatamente o que merece sua atenção.**\n"
                 + "O sistema ignora o restante da conversa e publica somente mensagens que "
@@ -147,11 +164,16 @@ export class DiscordControlPanel {
                 .setStyle(ButtonStyle.Primary)
         );
 
-        return {
+        const payload = {
             embeds: [embed],
             components: [buttons],
             allowedMentions: { parse: [] },
         };
+        if (attachLogo) {
+            payload.files = [new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME)];
+        }
+        if (replaceAttachments) payload.attachments = [];
+        return payload;
     }
 
     modal(type) {

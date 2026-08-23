@@ -1,16 +1,19 @@
 import {
     ActivityType,
+    AttachmentBuilder,
     Client,
     EmbedBuilder,
     Events,
     GatewayIntentBits,
     escapeMarkdown,
 } from "discord.js";
+import { fileURLToPath } from "node:url";
 import { DiscordControlPanel } from "./DiscordControlPanel.js";
 import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
-const EMBED_DESCRIPTION_LIMIT = 4_096;
+const LOGO_NAME = "realeza-logo.png";
+const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
 
 const displayNameFor = (message) => (
     message.nickname || message.regname || message.userId || "Usuário desconhecido"
@@ -24,14 +27,6 @@ const matchSummary = (matches) => [
         ? `👤 **Nicks monitorados:** ${matches.nicknames.map((entry) => escapeMarkdown(entry)).join(", ")}`
         : null,
 ].filter(Boolean).join("\n");
-
-const alertColor = (matches) => (
-    matches.keywords.length && matches.nicknames.length
-        ? 0xED4245
-        : matches.nicknames.length
-            ? 0x9B59B6
-            : 0xF1C40F
-);
 
 export class DiscordBridge {
     constructor(config, logger, client = null, store = null) {
@@ -141,52 +136,10 @@ export class DiscordBridge {
 
         this.queue = this.queue
             .then(async () => {
-                let delivered = false;
-                try {
-                    await this.channel?.send({
-                        embeds: [this.publicAlertEmbed(message, matches)],
-                        allowedMentions: { parse: [] },
-                    });
-                    delivered = true;
-                } catch (error) {
-                    this.logger.error(
-                        `[discord] Falha ao encaminhar mensagem: ${error.message}`
-                    );
-                }
-
-                await this.sendAlert(message, matches);
-                return delivered;
+                return this.sendAlert(message, matches);
             });
 
         return this.queue;
-    }
-
-    publicAlertEmbed(message, matches) {
-        const displayName = escapeMarkdown(displayNameFor(message));
-        const safeText = escapeMarkdown(message.text || "").slice(
-            0,
-            EMBED_DESCRIPTION_LIMIT - 8
-        );
-
-        return new EmbedBuilder()
-            .setColor(alertColor(matches))
-            .setAuthor({ name: "XAT SENTINEL  •  DETECÇÃO EM TEMPO REAL" })
-            .setTitle("🔎 Correspondência detectada")
-            .setDescription(`>>> ${safeText}`)
-            .addFields(
-                {
-                    name: "👤 Usuário",
-                    value: `**${displayName}**\n\`ID ${message.userId || "desconhecido"}\``,
-                    inline: true,
-                },
-                {
-                    name: "🎯 Regra acionada",
-                    value: matchSummary(matches).slice(0, 1_024),
-                    inline: true,
-                }
-            )
-            .setFooter({ text: "Monitoramento seletivo • somente regras configuradas" })
-            .setTimestamp();
     }
 
     async sendAlert(message, matches) {
@@ -200,6 +153,7 @@ export class DiscordBridge {
                 .setColor(0xED4245)
                 .setAuthor({ name: "XAT SENTINEL  •  ALERTA PRIVADO" })
                 .setTitle("🚨 Atividade monitorada detectada")
+                .setThumbnail(`attachment://${LOGO_NAME}`)
                 .setDescription(
                     "Uma regra configurada foi acionada no xat.\n\n"
                     + `>>> ${safeText}`
@@ -221,6 +175,7 @@ export class DiscordBridge {
 
             await this.ownerUser.send({
                 embeds: [embed],
+                files: [new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME)],
                 allowedMentions: { parse: [] },
             });
             return true;
