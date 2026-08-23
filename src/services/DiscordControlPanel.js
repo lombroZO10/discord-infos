@@ -6,14 +6,12 @@ import {
     EmbedBuilder,
     MessageFlags,
     ModalBuilder,
-    StringSelectMenuBuilder,
-    StringSelectMenuOptionBuilder,
     TextInputBuilder,
     TextInputStyle,
     escapeMarkdown,
 } from "discord.js";
 import { fileURLToPath } from "node:url";
-import { DISCORD_THEMES, getDiscordTheme } from "./DiscordThemes.js";
+import { discordColorValue } from "./DiscordColor.js";
 
 const LOGO_NAME = "realeza-logo.png";
 const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
@@ -29,7 +27,9 @@ const IDS = {
     nicknameButton: "xat-monitor:nicknames",
     keywordModal: "xat-monitor:keywords-modal",
     nicknameModal: "xat-monitor:nicknames-modal",
-    themeSelect: "xat-monitor:theme",
+    colorButton: "xat-monitor:color",
+    colorModal: "xat-monitor:color-modal",
+    colorInput: "xat-monitor:color-input",
     input: "xat-monitor:entries",
 };
 
@@ -92,6 +92,10 @@ export class DiscordControlPanel {
         }
 
         if (interaction.isButton()) {
+            if (interaction.customId === IDS.colorButton) {
+                await interaction.showModal(this.colorModal());
+                return;
+            }
             const type = interaction.customId === IDS.keywordButton
                 ? "keywords"
                 : interaction.customId === IDS.nicknameButton
@@ -102,19 +106,21 @@ export class DiscordControlPanel {
             return;
         }
 
-        if (interaction.isStringSelectMenu?.() && interaction.customId === IDS.themeSelect) {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const themeName = interaction.values[0];
-            await this.store.setTheme(themeName);
-            await this.refresh();
-            const theme = getDiscordTheme(themeName);
-            await interaction.editReply(
-                `${theme.emoji} **Tema ${theme.label} aplicado com sucesso.**`
-            );
-            return;
-        }
-
         if (interaction.isModalSubmit()) {
+            if (interaction.customId === IDS.colorModal) {
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+                const value = interaction.fields.getTextInputValue(IDS.colorInput);
+                let color;
+                try {
+                    color = await this.store.setColor(value);
+                } catch (error) {
+                    await interaction.editReply(`❌ ${error.message}`);
+                    return;
+                }
+                await this.refresh();
+                await interaction.editReply(`🎨 **Cor principal atualizada para ${color}.**`);
+                return;
+            }
             const type = interaction.customId === IDS.keywordModal
                 ? "keywords"
                 : interaction.customId === IDS.nicknameModal
@@ -139,9 +145,8 @@ export class DiscordControlPanel {
 
     payload({ files = [] } = {}) {
         const state = this.store.snapshot();
-        const theme = getDiscordTheme(state.theme);
         const embed = new EmbedBuilder()
-            .setColor(theme.color)
+            .setColor(discordColorValue(state.color))
             .setAuthor({ name: "XAT SENTINEL  •  SISTEMA DE INTELIGÊNCIA" })
             .setTitle("🛰️ Central de Monitoramento")
             .setThumbnail(`attachment://${LOGO_NAME}`)
@@ -172,7 +177,7 @@ export class DiscordControlPanel {
                 },
                 {
                     name: "🎨 VISUAL ATIVO",
-                    value: `${theme.emoji} **${theme.label}** • ${theme.description}`,
+                    value: `Cor principal: **${state.color}**`,
                 }
             )
             .setFooter({ text: "XAT Sentinel • alterações aplicadas instantaneamente" })
@@ -188,27 +193,17 @@ export class DiscordControlPanel {
                 .setCustomId(IDS.nicknameButton)
                 .setLabel("Gerenciar nicks")
                 .setEmoji("👤")
-                .setStyle(ButtonStyle.Primary)
-        );
-        const themeSelect = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId(IDS.themeSelect)
-                .setPlaceholder("Escolha o visual dos embeds")
-                .addOptions(
-                    Object.entries(DISCORD_THEMES).map(([value, preset]) => (
-                        new StringSelectMenuOptionBuilder()
-                            .setLabel(preset.label)
-                            .setDescription(preset.description)
-                            .setEmoji(preset.emoji)
-                            .setValue(value)
-                            .setDefault(value === state.theme)
-                    ))
-                )
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId(IDS.colorButton)
+                .setLabel("Cor principal")
+                .setEmoji("🎨")
+                .setStyle(ButtonStyle.Secondary)
         );
 
         const payload = {
             embeds: [embed],
-            components: [buttons, themeSelect],
+            components: [buttons],
             allowedMentions: { parse: [] },
         };
         if (files.length) {
@@ -238,6 +233,24 @@ export class DiscordControlPanel {
         return new ModalBuilder()
             .setCustomId(isKeywords ? IDS.keywordModal : IDS.nicknameModal)
             .setTitle(isKeywords ? "Configurar palavras-chave" : "Configurar nicks")
+            .addComponents(new ActionRowBuilder().addComponents(input));
+    }
+
+    colorModal() {
+        const color = this.store.snapshot().color;
+        const input = new TextInputBuilder()
+            .setCustomId(IDS.colorInput)
+            .setLabel("Cor hexadecimal")
+            .setPlaceholder("#7F05F5")
+            .setValue(color)
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMinLength(6)
+            .setMaxLength(7);
+
+        return new ModalBuilder()
+            .setCustomId(IDS.colorModal)
+            .setTitle("Configurar cor principal")
             .addComponents(new ActionRowBuilder().addComponents(input));
     }
 }

@@ -1,12 +1,17 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { DEFAULT_DISCORD_THEME, isDiscordTheme } from "./DiscordThemes.js";
+import {
+    DEFAULT_DISCORD_COLOR,
+    normalizeDiscordColor,
+    storedDiscordColor,
+} from "./DiscordColor.js";
 
 const MAX_ENTRIES = 40;
 const MAX_ENTRY_LENGTH = 80;
 
 const normalize = (value) => String(value || "")
-    .normalize("NFKC")
+    .normalize("NFKD")
+    .replace(/\p{M}|\p{Cf}/gu, "")
     .trim()
     .replace(/\s+/g, " ")
     .toLocaleLowerCase();
@@ -44,9 +49,9 @@ export class DiscordMonitorStore {
     constructor(file = "./data/discord-monitor.json") {
         this.file = resolve(file);
         this.data = {
-            version: 2,
+            version: 3,
             panelMessageId: null,
-            theme: DEFAULT_DISCORD_THEME,
+            color: DEFAULT_DISCORD_COLOR,
             keywords: [],
             nicknames: [],
         };
@@ -57,13 +62,11 @@ export class DiscordMonitorStore {
         try {
             const stored = JSON.parse(await readFile(this.file, "utf8"));
             this.data = {
-                version: 2,
+                version: 3,
                 panelMessageId: typeof stored.panelMessageId === "string"
                     ? stored.panelMessageId
                     : null,
-                theme: isDiscordTheme(stored.theme)
-                    ? stored.theme
-                    : DEFAULT_DISCORD_THEME,
+                color: storedDiscordColor(stored),
                 keywords: cleanEntries(stored.keywords),
                 nicknames: cleanEntries(stored.nicknames),
             };
@@ -77,7 +80,7 @@ export class DiscordMonitorStore {
     snapshot() {
         return {
             panelMessageId: this.data.panelMessageId,
-            theme: this.data.theme,
+            color: this.data.color,
             keywords: [...this.data.keywords],
             nicknames: [...this.data.nicknames],
         };
@@ -98,11 +101,12 @@ export class DiscordMonitorStore {
         await this.persist();
     }
 
-    async setTheme(theme) {
-        if (!isDiscordTheme(theme)) throw new Error("Tema do Discord inválido.");
-        this.data.theme = theme;
+    async setColor(color) {
+        const normalized = normalizeDiscordColor(color);
+        if (!normalized) throw new Error("Use uma cor hexadecimal como #7F05F5.");
+        this.data.color = normalized;
         await this.persist();
-        return theme;
+        return normalized;
     }
 
     match(message) {

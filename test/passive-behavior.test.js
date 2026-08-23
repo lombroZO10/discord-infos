@@ -11,6 +11,7 @@ import UserJoinedHandler from "../src/handlers/UserJoinedHandler.js";
 import { DiscordBridge } from "../src/services/DiscordBridge.js";
 import { DiscordControlPanel } from "../src/services/DiscordControlPanel.js";
 import { DiscordMonitorStore } from "../src/services/DiscordMonitorStore.js";
+import { formatXatTextForDiscord } from "../src/services/DiscordTextFormatter.js";
 
 const createConnectedBot = (profile = {}) => {
     const sent = [];
@@ -285,7 +286,7 @@ test("monitor settings persist and match whole keywords and normalized nicks", a
     await store.load();
     await store.replace("keywords", "Sim\nOFERTA\nsim");
     await store.replace("nicknames", "SeiLahNick");
-    await store.setTheme("royal");
+    await store.setColor("#7f05f5");
 
     const keywordMatch = store.match({
         text: "Ele disse SIM!",
@@ -302,16 +303,29 @@ test("monitor settings persist and match whole keywords and normalized nicks", a
         nickname: "SeiLahNick#r",
         regname: "registro",
     });
+    const styledNicknameMatch = store.match({
+        text: "Mensagem com fonte diferente",
+        nickname: "ＳｅｉＬａｈＮｉｃｋ#r",
+        regname: "registro",
+    });
 
     assert.deepEqual(keywordMatch.keywords, ["Sim"]);
     assert.equal(noPartialMatch.matched, false);
     assert.deepEqual(nicknameMatch.nicknames, ["SeiLahNick"]);
+    assert.deepEqual(styledNicknameMatch.nicknames, ["SeiLahNick"]);
 
     const reloaded = new DiscordMonitorStore(file);
     await reloaded.load();
     assert.deepEqual(reloaded.snapshot().keywords, ["Sim", "OFERTA"]);
     assert.deepEqual(reloaded.snapshot().nicknames, ["SeiLahNick"]);
-    assert.equal(reloaded.snapshot().theme, "royal");
+    assert.equal(reloaded.snapshot().color, "#7F05F5");
+});
+
+test("known xat smile codes and emoticons become Discord-friendly emoji", () => {
+    assert.equal(
+        formatXatTextForDiscord("Olha o (cd) :) (heart) :D (desconhecido)"),
+        "Olha o 💿 🙂 ❤️ 😄 (desconhecido)"
+    );
 });
 
 test("a monitored xat message is alerted privately without appearing in the channel", async () => {
@@ -345,7 +359,7 @@ test("a monitored xat message is alerted privately without appearing in the chan
         userId: "123",
         nickname: "SeiLahNick",
         regname: "registro",
-        text: "Sim, mensagem monitorada",
+        text: "Sim, mensagem monitorada (cd) :)",
     }), true);
 
     assert.equal(publicMessages.length, 0);
@@ -353,7 +367,11 @@ test("a monitored xat message is alerted privately without appearing in the chan
     const alert = privateMessages[0].embeds[0].toJSON();
     assert.match(alert.title, /Atividade monitorada/);
     assert.match(alert.description, /mensagem monitorada/);
+    assert.match(alert.description, /💿/);
+    assert.match(alert.description, /🙂/);
     assert.equal(alert.thumbnail.url, "attachment://realeza-logo.png");
+    assert.equal(alert.image, undefined);
+    assert.equal(privateMessages[0].files.length, 1);
     assert.match(alert.fields[1].value, /Sim/);
     assert.match(alert.fields[1].value, /SeiLahNick/);
     assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
@@ -362,6 +380,7 @@ test("a monitored xat message is alerted privately without appearing in the chan
 test("an invalid owner ID disables alerts while leaving the Discord client isolated", async () => {
     const publicMessages = [];
     const errors = [];
+    const presences = [];
     let readyHandler;
     const client = {
         on() {},
@@ -379,7 +398,7 @@ test("an invalid owner ID disables alerts while leaving the Discord client isola
         },
         user: {
             tag: "Bridge#0001",
-            setPresence() {},
+            setPresence: (presence) => presences.push(presence),
         },
     };
     const store = {
@@ -412,11 +431,18 @@ test("an invalid owner ID disables alerts while leaving the Discord client isola
     assert.equal(publicMessages.length, 0);
     assert.equal(errors.length, 1);
     assert.match(errors[0], /DISCORD_OWNER_ID inválido/);
+    assert.ok([
+        "o império crescer",
+        "as oportunidades surgirem",
+        "o dinheiro trabalhar",
+    ].includes(presences[0].activities[0].name));
+    bridge.stop();
 });
 
 test("the Discord control panel is persistent and restricted to the owner", async () => {
     const state = {
         panelMessageId: null,
+        color: "#7F05F5",
         keywords: ["Sim"],
         nicknames: ["SeiLahNick"],
     };
@@ -427,7 +453,7 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
     const store = {
         snapshot: () => ({
             panelMessageId: state.panelMessageId,
-            theme: state.theme || "realeza",
+            color: state.color,
             keywords: [...state.keywords],
             nicknames: [...state.nicknames],
         }),
@@ -438,9 +464,9 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
             state[type] = value ? value.split("\n") : [];
             return state[type];
         },
-        setTheme: async (theme) => {
-            state.theme = theme;
-            return theme;
+        setColor: async (color) => {
+            state.color = color.toUpperCase();
+            return state.color;
         },
     };
     const message = {
@@ -478,19 +504,27 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
     assert.equal(panelPayloads[0].files[0].name, "realeza-logo.png");
     assert.equal(panelPayloads[0].files[1].name, "realeza-banner.png");
     assert.equal(panel.payload().files, undefined);
-    assert.equal(panel.payload().components.length, 2);
+    assert.equal(panel.payload().components.length, 1);
 
     await panel.handleInteraction({
-        customId: "xat-monitor:theme",
+        customId: "xat-monitor:color",
+        user: { id: "123" },
+        isButton: () => true,
+        showModal: async (modal) => modals.push(modal.toJSON()),
+    });
+    assert.equal(modals[0].custom_id, "xat-monitor:color-modal");
+
+    await panel.handleInteraction({
+        customId: "xat-monitor:color-modal",
         user: { id: "123" },
         isButton: () => false,
-        isStringSelectMenu: () => true,
-        values: ["rubi"],
+        isModalSubmit: () => true,
+        fields: { getTextInputValue: () => "#7f05f5" },
         deferReply: async () => {},
         editReply: async (content) => replies.push(content),
     });
-    assert.equal(state.theme, "rubi");
-    assert.equal(panel.payload().embeds[0].toJSON().color, 0xED4245);
+    assert.equal(state.color, "#7F05F5");
+    assert.equal(panel.payload().embeds[0].toJSON().color, 0x7F05F5);
 
     await panel.handleInteraction({
         customId: "xat-monitor:keywords",
@@ -505,7 +539,7 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
         isButton: () => true,
         showModal: async (modal) => modals.push(modal.toJSON()),
     });
-    assert.equal(modals[0].custom_id, "xat-monitor:keywords-modal");
+    assert.equal(modals[1].custom_id, "xat-monitor:keywords-modal");
 
     await panel.handleInteraction({
         customId: "xat-monitor:nicknames-modal",

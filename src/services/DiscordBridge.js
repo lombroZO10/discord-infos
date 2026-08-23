@@ -10,13 +10,17 @@ import {
 import { fileURLToPath } from "node:url";
 import { DiscordControlPanel } from "./DiscordControlPanel.js";
 import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
-import { getDiscordTheme } from "./DiscordThemes.js";
+import { discordColorValue } from "./DiscordColor.js";
+import { formatXatTextForDiscord } from "./DiscordTextFormatter.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const LOGO_NAME = "realeza-logo.png";
 const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
-const BANNER_NAME = "realeza-banner.png";
-const BANNER_PATH = fileURLToPath(new URL("../../assets/realeza-banner.png", import.meta.url));
+const DEFAULT_ACTIVITIES = Object.freeze([
+    "o império crescer",
+    "as oportunidades surgirem",
+    "o dinheiro trabalhar",
+]);
 
 const displayNameFor = (message) => (
     message.nickname || message.regname || message.userId || "Usuário desconhecido"
@@ -41,6 +45,8 @@ export class DiscordBridge {
         this.queue = Promise.resolve();
         this.client = client;
         this.store = store || new DiscordMonitorStore(config.configFile);
+        this.activityTimer = null;
+        this.lastActivity = null;
     }
 
     async start() {
@@ -95,13 +101,7 @@ export class DiscordBridge {
                 `[discord] Configuração do monitor inválida; usando listas vazias: ${error.message}`
             );
         }
-        this.client.user.setPresence({
-            activities: [{
-                name: activity,
-                type: ActivityType.Watching,
-            }],
-            status: "online",
-        });
+        this.startActivityRotation(activity);
 
         if (validOwnerId) {
             this.panel = new DiscordControlPanel({
@@ -131,6 +131,28 @@ export class DiscordBridge {
         return true;
     }
 
+    startActivityRotation(configuredActivity) {
+        const configured = String(configuredActivity || "").trim();
+        const activities = configured && configured.toLocaleLowerCase() !== "xat.com"
+            ? configured.split("|").map((entry) => entry.trim()).filter(Boolean)
+            : [...DEFAULT_ACTIVITIES];
+
+        const update = () => {
+            const choices = activities.filter((entry) => entry !== this.lastActivity);
+            const pool = choices.length ? choices : activities;
+            const activity = pool[Math.floor(Math.random() * pool.length)];
+            this.lastActivity = activity;
+            this.client.user.setPresence({
+                activities: [{ name: activity, type: ActivityType.Watching }],
+                status: "online",
+            });
+        };
+
+        update();
+        this.activityTimer = setInterval(update, 60_000);
+        this.activityTimer.unref?.();
+    }
+
     relayXatMessage(message) {
         if (!this.channel) return Promise.resolve(false);
 
@@ -151,14 +173,14 @@ export class DiscordBridge {
         try {
             this.ownerUser ||= await this.client.users.fetch(this.config.ownerId);
             const displayName = escapeMarkdown(displayNameFor(message));
-            const safeText = escapeMarkdown(message.text || "").slice(0, 3_900);
-            const theme = getDiscordTheme(this.store.snapshot?.().theme);
+            const discordText = formatXatTextForDiscord(message.text);
+            const safeText = escapeMarkdown(discordText).slice(0, 3_900);
+            const color = this.store.snapshot?.().color;
             const embed = new EmbedBuilder()
-                .setColor(theme.color)
+                .setColor(discordColorValue(color))
                 .setAuthor({ name: "XAT SENTINEL  •  ALERTA PRIVADO" })
                 .setTitle("🚨 Atividade monitorada detectada")
                 .setThumbnail(`attachment://${LOGO_NAME}`)
-                .setImage(`attachment://${BANNER_NAME}`)
                 .setDescription(
                     "Uma regra configurada foi acionada no xat.\n\n"
                     + `>>> ${safeText}`
@@ -182,7 +204,6 @@ export class DiscordBridge {
                 embeds: [embed],
                 files: [
                     new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME),
-                    new AttachmentBuilder(BANNER_PATH).setName(BANNER_NAME),
                 ],
                 allowedMentions: { parse: [] },
             });
@@ -194,6 +215,8 @@ export class DiscordBridge {
     }
 
     stop() {
+        if (this.activityTimer) clearInterval(this.activityTimer);
+        this.activityTimer = null;
         this.channel = null;
         this.ownerUser = null;
         this.panel = null;
