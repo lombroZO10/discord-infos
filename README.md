@@ -32,6 +32,8 @@ BOT_USER=your_xat_username
 BOT_APIKEY=your_xat_api_key
 BOT_CHAT=your_chat_name
 BOT_NICK=Bot
+BOT_AVATAR=171
+BOT_HOME=
 CHAT_LANGUAGE=all
 DISABLED_POWERS=[29]
 WEBSOCKET_URL=wss://bots.xat.com/v2
@@ -39,7 +41,9 @@ WEBSOCKET_ORIGIN=https://xat.com
 OPENAI_KEY=""
 ```
 
-Quando `BOT_NICK` estiver preenchido, ele define o nome exibido pelo bot. Se a variável for omitida ou estiver vazia, o nome salvo no SQLite será usado como fallback.
+Quando `BOT_NICK` ou `BOT_AVATAR` estiver preenchido, o valor correspondente define o nome ou avatar exibido pelo bot. Se uma dessas variáveis for omitida ou estiver vazia, o valor salvo no SQLite será usado como fallback.
+
+`BOT_HOME` define o link da casinha. Uma variável presente e vazia (`BOT_HOME=`) remove o link; se ela for omitida do `.env`, o valor salvo no SQLite será mantido.
 
 ## Execução
 
