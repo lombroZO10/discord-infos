@@ -47,12 +47,10 @@ test("private messages are not registered for processing", () => {
     assert.equal(Handlers.some((handler) => handler.name === "p"), false);
 });
 
-test("a former command is treated as an ordinary public message", async () => {
-    const moderated = [];
+test("a former command is only treated as passive monitoring input", async () => {
     const relayed = [];
     const bot = {
         state: {
-            settings: { modFilters: true },
             getUser: () => ({
                 getNick: () => "Visitor",
                 getRegname: () => "visitor",
@@ -61,14 +59,10 @@ test("a former command is treated as an ordinary public message", async () => {
         discordBridge: {
             relayXatMessage: (message) => relayed.push(message),
         },
-        moderationFilters: async (userId, message) => {
-            moderated.push([userId, message]);
-        },
     };
 
     await MessageHandler.execute(bot, { u: "123", t: "!ping" });
 
-    assert.deepEqual(moderated, [[123, "!ping"]]);
     assert.deepEqual(relayed, [{
         userId: "123",
         nickname: "Visitor",
@@ -119,6 +113,19 @@ test("the bot core exposes no chat-message sending helpers", async () => {
 
     assert.doesNotMatch(source, /async\s+(?:reply|sendMessage|sendPM|sendPC)\s*\(/);
     assert.doesNotMatch(source, /this\.send\(["'](?:m|p)["']/);
+});
+
+test("the xat runtime exposes no commands, moderation or optional responses", async () => {
+    const botSource = await readFile(new URL("../src/core/Bot.js", import.meta.url), "utf8");
+    const messageSource = await readFile(
+        new URL("../src/handlers/MessageHandler.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.doesNotMatch(botSource, /async\s+(?:kick|ban|moderationFilters)\s*\(/);
+    assert.doesNotMatch(botSource, /t:\s*["']\/(?:k|g|aon)/);
+    assert.doesNotMatch(messageSource, /moderationFilters/);
+    assert.equal(Handlers.some((handler) => ["a", "z"].includes(handler.name)), false);
 });
 
 test("protocol logs do not include packet payloads or credentials", async () => {

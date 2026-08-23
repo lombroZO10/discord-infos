@@ -23,8 +23,5 @@ export default {
             regname: user?.getRegname(),
             text: message,
         });
-
-        if (bot.state.settings.modFilters)
-            await bot.moderationFilters(userID, message);
     },
 };

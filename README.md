@@ -2,11 +2,10 @@
 
 Bot de moderação para salas do xat, desenvolvido em Node.js.
 
-Esta versão não possui comandos e não envia mensagens automáticas, mensagens públicas, PMs ou PCs. O bot continua mantendo a conexão, a presença, o cache de usuários e os filtros automáticos de moderação.
+Esta versão não possui comandos e não envia mensagens automáticas, mensagens públicas, PMs, PCs ou ações de moderação. O bot somente mantém a conexão, a presença, o cache temporário de usuários e o monitoramento para o Discord.
 
 ## Recursos mantidos
 
-- Filtros de moderação configurados no banco SQLite
 - Rastreamento de entrada e saída de usuários
 - Monitoramento seletivo de mensagens públicas do xat no Discord
 - Reconexão e tratamento de erros
@@ -80,11 +79,9 @@ npm start
 - Entradas de usuários não geram mensagens de boas-vindas.
 - Pacotes internos de autenticação, presença, ping e keepalive continuam ativos porque fazem parte da conexão, não são mensagens enviadas aos usuários.
 
-## Configuração da moderação
+## Operação passiva no xat
 
-As opções de moderação continuam armazenadas na tabela `settings` do arquivo `database.db`. Como não existem comandos nesta versão, alterações nessas opções devem ser feitas diretamente no banco ou por uma futura interface administrativa.
-
-Todos os filtros de moderação são locais; esta versão não integra nem envia conteúdo para a OpenAI.
+O bot não responde tickles, presentes ou transferências e não executa kick, ban ou filtros de moderação. Os únicos pacotes enviados ao xat são técnicos e indispensáveis para autenticação, entrada na sala, ping, keepalive e reconexão. Esta versão também não integra nem envia conteúdo para a OpenAI.
 
 ## Segurança
 
