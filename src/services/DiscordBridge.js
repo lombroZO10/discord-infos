@@ -26,14 +26,17 @@ const displayNameFor = (message) => (
     message.nickname || message.regname || message.userId || "Usuário desconhecido"
 );
 
-const matchSummary = (matches) => [
-    matches.keywords.length
-        ? `🔑 **Palavras-chave:** ${matches.keywords.map((entry) => escapeMarkdown(entry)).join(", ")}`
-        : null,
-    matches.nicknames.length
-        ? `👤 **Nicks monitorados:** ${matches.nicknames.map((entry) => escapeMarkdown(entry)).join(", ")}`
-        : null,
-].filter(Boolean).join("\n");
+const detectedRule = (matches) => {
+    if (matches.keywords.length) {
+        return matches.keywords
+            .map((entry) => `**${escapeMarkdown(entry)}**`)
+            .join(" • ");
+    }
+
+    return `Nick monitorado: **${matches.nicknames
+        .map((entry) => escapeMarkdown(entry))
+        .join(", ")}**`;
+};
 
 export class DiscordBridge {
     constructor(config, logger, client = null, store = null) {
@@ -174,30 +177,25 @@ export class DiscordBridge {
             this.ownerUser ||= await this.client.users.fetch(this.config.ownerId);
             const displayName = escapeMarkdown(displayNameFor(message));
             const discordText = formatXatTextForDiscord(message.text);
-            const safeText = escapeMarkdown(discordText).slice(0, 3_900);
+            const safeText = escapeMarkdown(discordText).slice(0, 3_500);
             const color = this.store.snapshot?.().color;
             const embed = new EmbedBuilder()
                 .setColor(discordColorValue(color))
-                .setAuthor({ name: "XAT SENTINEL  •  ALERTA PRIVADO" })
-                .setTitle("🚨 Atividade monitorada detectada")
+                .setAuthor({ name: "REΛLEZA  •  ALERTA PRIVADO" })
+                .setTitle(`👤 ${displayName}`.slice(0, 256))
                 .setThumbnail(`attachment://${LOGO_NAME}`)
-                .setDescription(
-                    "Uma regra configurada foi acionada no xat.\n\n"
-                    + `>>> ${safeText}`
-                )
+                .setDescription(`>>> ${safeText}`)
                 .addFields(
                     {
-                        name: "👤 Identidade",
-                        value: `**${displayName}**\n\`ID ${message.userId || "desconhecido"}\``,
-                        inline: true,
-                    },
-                    {
-                        name: "🎯 Motivo do alerta",
-                        value: matchSummary(matches).slice(0, 1_024),
-                        inline: true,
+                        name: matches.keywords.length > 1
+                            ? "🎯 Palavras citadas"
+                            : matches.keywords.length === 1
+                                ? "🎯 Palavra citada"
+                                : "🎯 Gatilho",
+                        value: detectedRule(matches).slice(0, 1_024),
                     }
                 )
-                .setFooter({ text: "Alerta confidencial • XAT Sentinel" })
+                .setFooter({ text: "REΛLEZA • monitoramento confidencial" })
                 .setTimestamp();
 
             await this.ownerUser.send({

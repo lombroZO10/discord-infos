@@ -66,6 +66,8 @@ Palavras-chave são comparadas como palavras ou frases completas, sem diferencia
 
 Fontes Unicode decorativas, acentos combinados e caracteres invisíveis são normalizados durante a comparação dos nicks. Na mensagem privada, smiles conhecidos do xat, como `(cd)`, `(heart)`, `:)`, `:D` e `<3`, são convertidos para emojis do Discord; códigos desconhecidos são preservados.
 
+O alerta privado é propositalmente compacto: mostra somente o nick, a mensagem e a palavra detectada. Quando a regra acionada for apenas um nick monitorado, o campo de gatilho informa esse nick.
+
 ## Execução
 
 ```bash

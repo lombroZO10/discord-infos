@@ -240,10 +240,10 @@ test("the Discord bridge sends matching messages only as safe private embeds in 
     assert.equal(publicMessages.length, 0);
     assert.equal(privateMessages.length, 2);
     assert.ok(privateMessages[0].embeds[0].toJSON().description.length <= 4_096);
-    assert.match(privateMessages[0].embeds[0].toJSON().fields[0].value, /Nog/);
+    assert.match(privateMessages[0].embeds[0].toJSON().title, /Nog/);
     assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
     assert.equal(privateMessages[0].files[0].name, "realeza-logo.png");
-    assert.match(privateMessages[1].embeds[0].toJSON().fields[0].value, /Second/);
+    assert.match(privateMessages[1].embeds[0].toJSON().title, /Second/);
 });
 
 test("the Discord bridge ignores every xat message that does not match a rule", async () => {
@@ -372,16 +372,32 @@ test("a monitored xat message is alerted privately without appearing in the chan
     assert.equal(publicMessages.length, 0);
     assert.equal(privateMessages.length, 1);
     const alert = privateMessages[0].embeds[0].toJSON();
-    assert.match(alert.title, /Atividade monitorada/);
+    assert.match(alert.author.name, /REΛLEZA/);
+    assert.match(alert.title, /SeiLahNick/);
     assert.match(alert.description, /mensagem monitorada/);
     assert.match(alert.description, /💿/);
     assert.match(alert.description, /🙂/);
     assert.equal(alert.thumbnail.url, "attachment://realeza-logo.png");
     assert.equal(alert.image, undefined);
     assert.equal(privateMessages[0].files.length, 1);
-    assert.match(alert.fields[1].value, /Sim/);
-    assert.match(alert.fields[1].value, /SeiLahNick/);
+    assert.equal(alert.fields.length, 1);
+    assert.equal(alert.fields[0].name, "🎯 Palavra citada");
+    assert.match(alert.fields[0].value, /Sim/);
+    assert.doesNotMatch(JSON.stringify(alert), /ID 123/);
     assert.deepEqual(privateMessages[0].allowedMentions, { parse: [] });
+
+    assert.equal(await bridge.sendAlert({
+        userId: "456",
+        nickname: "AlvoMonitorado",
+        text: "Mensagem sem palavra-chave",
+    }, {
+        matched: true,
+        keywords: [],
+        nicknames: ["AlvoMonitorado"],
+    }), true);
+    const nicknameAlert = privateMessages[1].embeds[0].toJSON();
+    assert.equal(nicknameAlert.fields[0].name, "🎯 Gatilho");
+    assert.match(nicknameAlert.fields[0].value, /Nick monitorado/);
 });
 
 test("an invalid owner ID disables alerts while leaving the Discord client isolated", async () => {
