@@ -17,7 +17,13 @@ export class Bot {
         this.state = new BotState();
 
         this.xatBlogAPI = new XatBlogAPI();
-        this.discordBridge = new DiscordBridge(this.state.envData.discord, this.logger);
+        this.discordBridge = new DiscordBridge(
+            this.state.envData.discord,
+            this.logger,
+            null,
+            null,
+            () => this.state.getOnlineUsers()
+        );
 
         this.packetHandler = new PacketHandler(this);
 

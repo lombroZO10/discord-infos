@@ -12,6 +12,7 @@ import { DiscordControlPanel } from "./DiscordControlPanel.js";
 import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
 import { discordColorValue } from "./DiscordColor.js";
 import { formatXatTextForDiscord } from "./DiscordTextFormatter.js";
+import { DiscordOnlineCommand } from "./DiscordOnlineCommand.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const LOGO_NAME = "realeza-logo.png";
@@ -39,7 +40,7 @@ const detectedRule = (matches) => {
 };
 
 export class DiscordBridge {
-    constructor(config, logger, client = null, store = null) {
+    constructor(config, logger, client = null, store = null, getOnlineUsers = null) {
         this.config = config;
         this.logger = logger;
         this.channel = null;
@@ -50,6 +51,11 @@ export class DiscordBridge {
         this.store = store || new DiscordMonitorStore(config.configFile);
         this.activityTimer = null;
         this.lastActivity = null;
+        this.onlineCommand = new DiscordOnlineCommand({
+            getUsers: getOnlineUsers || (() => []),
+            getColor: () => this.store.snapshot?.().color,
+            logger,
+        });
     }
 
     async start() {
@@ -105,6 +111,18 @@ export class DiscordBridge {
             );
         }
         this.startActivityRotation(activity);
+        this.client.on(Events.InteractionCreate, (interaction) => {
+            void this.handleInteraction(interaction).catch((error) => {
+                this.logger.error(`[discord] Falha na interação: ${error.message}`);
+            });
+        });
+
+        try {
+            const commandManager = channel.guild?.commands || this.client.application?.commands;
+            await this.onlineCommand.register(commandManager);
+        } catch (error) {
+            this.logger.error(`[discord] Não foi possível registrar /onlines: ${error.message}`);
+        }
 
         if (validOwnerId) {
             this.panel = new DiscordControlPanel({
@@ -113,11 +131,6 @@ export class DiscordBridge {
                 ownerId: validOwnerId,
                 store: this.store,
                 logger: this.logger,
-            });
-            this.client.on(Events.InteractionCreate, (interaction) => {
-                void this.panel?.handleInteraction(interaction).catch((error) => {
-                    this.logger.error(`[discord] Falha no painel: ${error.message}`);
-                });
             });
             try {
                 await this.panel.start();
@@ -132,6 +145,11 @@ export class DiscordBridge {
 
         this.logger.info(`[discord] Conectado como ${this.client.user.tag}.`);
         return true;
+    }
+
+    async handleInteraction(interaction) {
+        if (await this.onlineCommand.handle(interaction)) return;
+        await this.panel?.handleInteraction(interaction);
     }
 
     startActivityRotation(configuredActivity) {

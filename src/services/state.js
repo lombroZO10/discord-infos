@@ -87,4 +87,18 @@ export class BotState {
     getUser(userId) {
         return this.users.get(userId);
     }
+
+    /**
+     * Returns a safe snapshot of people currently present in the xat room.
+     */
+    getOnlineUsers() {
+        const botUserId = Number(this.loginInfo.i);
+        return [...this.users.entries()]
+            .filter(([userId]) => userId !== botUserId)
+            .map(([userId, user]) => ({
+                userId: userId.toString(),
+                nickname: user.getNick() || null,
+                regname: user.getRegname() || null,
+            }));
+    }
 }

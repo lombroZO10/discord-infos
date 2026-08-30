@@ -68,6 +68,8 @@ Fontes Unicode decorativas, acentos combinados e caracteres invisíveis são nor
 
 O alerta privado é propositalmente compacto: mostra somente o nick, a mensagem e a palavra detectada. Quando a regra acionada for apenas um nick monitorado, o campo de gatilho informa esse nick.
 
+O comando Discord `/onlines` mostra no canal em que foi usado uma lista ordenada das pessoas atualmente presentes no xat. A resposta não envia nenhuma ação ao xat e é apagada automaticamente após 60 segundos.
+
 ## Execução
 
 ```bash

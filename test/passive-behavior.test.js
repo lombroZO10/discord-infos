@@ -11,7 +11,9 @@ import UserJoinedHandler from "../src/handlers/UserJoinedHandler.js";
 import { DiscordBridge } from "../src/services/DiscordBridge.js";
 import { DiscordControlPanel } from "../src/services/DiscordControlPanel.js";
 import { DiscordMonitorStore } from "../src/services/DiscordMonitorStore.js";
+import { DiscordOnlineCommand } from "../src/services/DiscordOnlineCommand.js";
 import { formatXatTextForDiscord } from "../src/services/DiscordTextFormatter.js";
+import { BotState } from "../src/services/state.js";
 
 const createConnectedBot = (profile = {}) => {
     const sent = [];
@@ -333,6 +335,67 @@ test("known xat smile codes and emoticons become Discord-friendly emoji", () => 
         formatXatTextForDiscord("Olha o (cd) :) (heart) :D (desconhecido)"),
         "Olha o 💿 🙂 ❤️ 😄 (desconhecido)"
     );
+});
+
+test("the online snapshot excludes the bot and exposes no mutable user objects", () => {
+    const state = Object.create(BotState.prototype);
+    state.loginInfo = { i: "999" };
+    state.users = new Map([
+        [123, { getNick: () => "Visitante", getRegname: () => "visitante" }],
+        [999, { getNick: () => "Bot", getRegname: () => "bot" }],
+    ]);
+
+    assert.deepEqual(state.getOnlineUsers(), [{
+        userId: "123",
+        nickname: "Visitante",
+        regname: "visitante",
+    }]);
+});
+
+test("/onlines replies safely and deletes its list after exactly one minute", async () => {
+    const replies = [];
+    const created = [];
+    const warnings = [];
+    let deleteReplyCalls = 0;
+    let scheduledCallback;
+    let scheduledDelay;
+    const command = new DiscordOnlineCommand({
+        getUsers: () => [
+            { userId: "2", nickname: "**Zulu**", regname: "zulu" },
+            { userId: "1", nickname: "Alpha @everyone", regname: "alpha" },
+        ],
+        getColor: () => "#7F05F5",
+        logger: { warn: (message) => warnings.push(message) },
+        schedule: (callback, delay) => {
+            scheduledCallback = callback;
+            scheduledDelay = delay;
+            return { unref() {} };
+        },
+    });
+
+    assert.equal(await command.register({
+        fetch: async () => new Map(),
+        create: async (definition) => created.push(definition),
+    }), true);
+    assert.equal(created[0].name, "onlines");
+
+    assert.equal(await command.handle({
+        isChatInputCommand: () => true,
+        commandName: "onlines",
+        reply: async (payload) => replies.push(payload),
+        deleteReply: async () => { deleteReplyCalls += 1; },
+    }), true);
+
+    const embed = replies[0].embeds[0].toJSON();
+    assert.match(embed.title, /2/);
+    assert.ok(embed.description.indexOf("Alpha") < embed.description.indexOf("Zulu"));
+    assert.match(embed.description, /@everyone/);
+    assert.deepEqual(replies[0].allowedMentions, { parse: [] });
+    assert.equal(scheduledDelay, 60_000);
+    scheduledCallback();
+    await Promise.resolve();
+    assert.equal(deleteReplyCalls, 1);
+    assert.equal(warnings.length, 0);
 });
 
 test("a monitored xat message is alerted privately without appearing in the channel", async () => {
