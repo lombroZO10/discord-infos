@@ -12,6 +12,7 @@ import { DiscordBridge } from "../src/services/DiscordBridge.js";
 import { DiscordControlPanel } from "../src/services/DiscordControlPanel.js";
 import { DiscordMonitorStore } from "../src/services/DiscordMonitorStore.js";
 import { DiscordOnlineCommand } from "../src/services/DiscordOnlineCommand.js";
+import { DiscordStatusMonitor } from "../src/services/DiscordStatusMonitor.js";
 import { formatXatTextForDiscord } from "../src/services/DiscordTextFormatter.js";
 import { BotState } from "../src/services/state.js";
 
@@ -523,6 +524,47 @@ test("an invalid owner ID disables alerts while leaving the Discord client isola
         "o dinheiro trabalhar",
     ].includes(presences[0].activities[0].name));
     bridge.stop();
+});
+
+test("the operational channel keeps a live dashboard and separate xat events", async () => {
+    const messages = [];
+    const edits = [];
+    const dashboardMessage = {
+        edit: async (payload) => edits.push(payload),
+    };
+    const channel = {
+        send: async (payload) => {
+            messages.push(payload);
+            return messages.length === 1 ? dashboardMessage : { id: String(messages.length) };
+        },
+    };
+    const monitor = new DiscordStatusMonitor({
+        logger: { error() {} },
+        chatName: "rhb",
+        heartbeatMs: 3_600_000,
+    });
+
+    await monitor.setXat("connecting", "Preparando conexão.");
+    await monitor.attach(channel, "Bridge#0001");
+    await monitor.setXat("reconnecting", "Sessão renovada.");
+    await monitor.setXat("connected", "Sala pronta.");
+    monitor.touchXat();
+
+    assert.equal(messages.length, 5);
+    assert.ok(edits.length >= 4);
+    assert.match(messages[0].embeds[0].toJSON().title, /Monitorando conexões/);
+    assert.match(messages[1].embeds[0].toJSON().title, /Monitoramento iniciado/);
+    assert.match(messages[3].embeds[0].toJSON().title, /Reconectando/);
+
+    const latestDashboard = edits.at(-1).embeds[0].toJSON();
+    assert.equal(latestDashboard.fields.find((field) => field.name === "Reconexões xat").value, "1");
+    assert.match(latestDashboard.fields.find((field) => field.name === "xat").value, /Conectado/);
+    assert.match(
+        latestDashboard.fields.find((field) => field.name === "Último sinal xat").value,
+        /<t:\d+:R>/
+    );
+    assert.deepEqual(messages[4].allowedMentions, { parse: [] });
+    monitor.stop();
 });
 
 test("the Discord control panel is persistent and restricted to the owner", async () => {

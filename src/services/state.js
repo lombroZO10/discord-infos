@@ -26,6 +26,7 @@ export class BotState {
             discord: {
                 token: process.env.DISCORD_BOT_TOKEN?.trim() || null,
                 channelId: process.env.DISCORD_CHANNEL_ID?.trim() || null,
+                statusChannelId: process.env.DISCORD_STATUS_CHANNEL_ID?.trim() || null,
                 ownerId: process.env.DISCORD_OWNER_ID?.trim() || null,
                 activity: process.env.DISCORD_ACTIVITY?.trim() || "xat.com",
                 configFile: process.env.DISCORD_CONFIG_FILE?.trim()

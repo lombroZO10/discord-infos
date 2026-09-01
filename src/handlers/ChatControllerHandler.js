@@ -11,7 +11,7 @@ export default {
             ['/u', '/k', '/g'].includes(packet.t?.substr(0, 2)) &&
             packet.d === bot.state.loginInfo.i
         ) {
-            await bot.restart();
+            await bot.restart("A sessão foi alterada pelo controlador da sala.");
         }
     }
 }

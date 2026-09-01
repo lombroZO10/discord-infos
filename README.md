@@ -39,6 +39,7 @@ WEBSOCKET_URL=wss://bots.xat.com/v2
 WEBSOCKET_ORIGIN=https://xat.com
 DISCORD_BOT_TOKEN=your_discord_bot_token
 DISCORD_CHANNEL_ID=123456789012345678
+DISCORD_STATUS_CHANNEL_ID=123456789012345679
 DISCORD_OWNER_ID=123456789012345678
 DISCORD_ACTIVITY=xat.com
 DISCORD_CONFIG_FILE=./data/discord-monitor.json
@@ -69,6 +70,12 @@ Fontes Unicode decorativas, acentos combinados e caracteres invisíveis são nor
 O alerta privado é propositalmente compacto: mostra somente o nick, a mensagem e a palavra detectada. Quando a regra acionada for apenas um nick monitorado, o campo de gatilho informa esse nick.
 
 O comando Discord `/onlines` mostra no canal em que foi usado uma lista ordenada das pessoas atualmente presentes no xat. A resposta não envia nenhuma ação ao xat e é apagada automaticamente após 60 segundos.
+
+## Canal operacional do Discord
+
+`DISCORD_STATUS_CHANNEL_ID` configura um segundo canal, separado do painel e dos alertas. Use obrigatoriamente um ID diferente de `DISCORD_CHANNEL_ID`. Ele recebe em tempo real os eventos importantes de inicialização, conexão, desconexão, reconexão e erros do xat. Um painel de saúde mostra o estado atual do Discord e do xat, o último sinal confirmado pelo WebSocket, o tempo ativo, a quantidade de reconexões e o último evento; ele é atualizado em cada mudança e a cada cinco minutos.
+
+Os pacotes brutos e credenciais nunca são publicados no Discord. Logs repetitivos de protocolo continuam disponíveis somente em `logs/app.log`, evitando vazamento de sessão e bloqueio por excesso de mensagens. Se o canal operacional estiver ausente ou inválido, a ponte e o bot do xat continuam funcionando normalmente e registram o problema localmente.
 
 ## Execução
 

@@ -18,7 +18,10 @@ export class Bot {
 
         this.xatBlogAPI = new XatBlogAPI();
         this.discordBridge = new DiscordBridge(
-            this.state.envData.discord,
+            {
+                ...this.state.envData.discord,
+                chatName: this.state.envData.chat,
+            },
             this.logger,
             null,
             null,
@@ -68,6 +71,12 @@ export class Bot {
             await this.keepRunning();
         } catch (error) {
             this.logger.error(`Init error: ${error.message} - ${error.stack}`);
+            await this.discordBridge.reportOperationalLog(
+                "error",
+                "Falha crítica na inicialização",
+                error.message,
+                "Processo"
+            );
             process.exit(1);
         }
     }
@@ -94,6 +103,10 @@ export class Bot {
      * @param {number} room - Chat ID
      */
     async connect (room = 0) {
+        void this.discordBridge.reportXatStatus(
+            "connecting",
+            room > 0 ? "Abrindo conexão de autenticação." : "Abrindo conexão com a sala configurada."
+        );
         this.state.ws = WebSocketData(this, room);
     }
 
@@ -118,6 +131,12 @@ export class Bot {
             this.state.ws.send(packet + "\x00");
         } catch (error) {
             this.logger.error(`Send error: ${error.message} - ${error.stack}`);
+            void this.discordBridge.reportOperationalLog(
+                "error",
+                "Falha ao enviar pacote técnico",
+                error.message,
+                "xat WebSocket"
+            );
         }
     }
 
@@ -128,6 +147,12 @@ export class Bot {
         const data = await this.xatBlogAPI.chatInfo(this.state.envData.chat);
         if (!data?.chat?.id) {
             this.logger.error("Chat not found");
+            await this.discordBridge.reportOperationalLog(
+                "error",
+                "Sala do xat não encontrada",
+                `Não foi possível localizar a sala configurada: ${this.state.envData.chat}`,
+                "Inicialização"
+            );
             process.exit(1);
         }
         this.state.chatInfo = data.chat;
@@ -136,7 +161,8 @@ export class Bot {
     /**
      * Restart xat bot.
      */
-    async restart () {
+    async restart (reason = "Reconexão solicitada pelo servidor.") {
+        void this.discordBridge.reportXatStatus("reconnecting", reason);
         await this.send("C", {});
         this.state.isConnected = false;
         this.state.ws.terminate();

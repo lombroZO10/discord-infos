@@ -7,6 +7,6 @@ export default {
      * @param {object} packet - Packet data
     */
     async execute (bot, packet) {
-        await bot.restart();
+        await bot.restart("O xat encerrou a sessão por inatividade.");
     }
 }

@@ -8,5 +8,9 @@ export default {
     */
     async execute (bot, packet) {
         bot.state.isConnected = true;
+        void bot.discordBridge.reportXatStatus(
+            "connected",
+            `Conectado e monitorando a sala ${bot.state.envData.chat}.`
+        );
     }
 }

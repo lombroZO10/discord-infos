@@ -13,6 +13,7 @@ import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
 import { discordColorValue } from "./DiscordColor.js";
 import { formatXatTextForDiscord } from "./DiscordTextFormatter.js";
 import { DiscordOnlineCommand } from "./DiscordOnlineCommand.js";
+import { DiscordStatusMonitor } from "./DiscordStatusMonitor.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const LOGO_NAME = "realeza-logo.png";
@@ -56,10 +57,14 @@ export class DiscordBridge {
             getColor: () => this.store.snapshot?.().color,
             logger,
         });
+        this.statusMonitor = new DiscordStatusMonitor({
+            logger,
+            chatName: config.chatName,
+        });
     }
 
     async start() {
-        const { token, channelId, ownerId, activity } = this.config;
+        const { token, channelId, statusChannelId, ownerId, activity } = this.config;
 
         if (!token && !channelId) {
             this.logger.warn("[discord] Ponte desativada: token e canal não configurados.");
@@ -88,6 +93,29 @@ export class DiscordBridge {
         });
         this.client.on(Events.Error, (error) => {
             this.logger.error(`[discord] Erro do cliente: ${error.message}`);
+            void this.statusMonitor.setDiscord("error", error.message);
+        });
+        this.client.on(Events.Warn, (warning) => {
+            this.logger.warn(`[discord] Aviso do cliente: ${warning}`);
+            void this.statusMonitor.log("warning", "Aviso do cliente Discord", warning, "Discord");
+        });
+        this.client.on(Events.ShardReconnecting, (shardId) => {
+            void this.statusMonitor.setDiscord(
+                "reconnecting",
+                `Gateway reconectando (shard ${shardId}).`
+            );
+        });
+        this.client.on(Events.ShardDisconnect, (closeEvent, shardId) => {
+            void this.statusMonitor.setDiscord(
+                "disconnected",
+                `Gateway desconectado (shard ${shardId}, código ${closeEvent?.code || "desconhecido"}).`
+            );
+        });
+        this.client.on(Events.ShardResume, (shardId, replayedEvents) => {
+            void this.statusMonitor.setDiscord(
+                "connected",
+                `Gateway restabelecido (shard ${shardId}, ${replayedEvents} eventos recuperados).`
+            );
         });
 
         const ready = new Promise((resolve) => {
@@ -103,17 +131,50 @@ export class DiscordBridge {
         }
 
         this.channel = channel;
+        if (statusChannelId) {
+            if (statusChannelId === channelId) {
+                this.logger.error(
+                    "[discord] DISCORD_STATUS_CHANNEL_ID deve ser diferente de DISCORD_CHANNEL_ID."
+                );
+            } else if (!DISCORD_ID_PATTERN.test(statusChannelId)) {
+                this.logger.error("[discord] DISCORD_STATUS_CHANNEL_ID deve conter um ID válido.");
+            } else {
+                try {
+                    const statusChannel = await this.client.channels.fetch(statusChannelId);
+                    if (!statusChannel?.isSendable()) {
+                        throw new Error(`O canal ${statusChannelId} não existe ou não aceita mensagens.`);
+                    }
+                    await this.statusMonitor.attach(statusChannel, this.client.user.tag);
+                } catch (error) {
+                    this.logger.error(`[discord] Canal de status indisponível: ${error.message}`);
+                }
+            }
+        } else {
+            this.logger.warn("[discord] DISCORD_STATUS_CHANNEL_ID ausente; logs em tempo real desativados.");
+        }
         try {
             await this.store.load();
         } catch (error) {
             this.logger.error(
                 `[discord] Configuração do monitor inválida; usando listas vazias: ${error.message}`
             );
+            void this.statusMonitor.log(
+                "error",
+                "Configuração do monitor inválida",
+                error.message,
+                "Discord"
+            );
         }
         this.startActivityRotation(activity);
         this.client.on(Events.InteractionCreate, (interaction) => {
             void this.handleInteraction(interaction).catch((error) => {
                 this.logger.error(`[discord] Falha na interação: ${error.message}`);
+                void this.statusMonitor.log(
+                    "error",
+                    "Falha ao processar interação",
+                    error.message,
+                    "Discord"
+                );
             });
         });
 
@@ -122,6 +183,12 @@ export class DiscordBridge {
             await this.onlineCommand.register(commandManager);
         } catch (error) {
             this.logger.error(`[discord] Não foi possível registrar /onlines: ${error.message}`);
+            void this.statusMonitor.log(
+                "error",
+                "Falha ao registrar /onlines",
+                error.message,
+                "Discord"
+            );
         }
 
         if (validOwnerId) {
@@ -136,6 +203,12 @@ export class DiscordBridge {
                 await this.panel.start();
             } catch (error) {
                 this.logger.error(`[discord] Não foi possível publicar o painel: ${error.message}`);
+                void this.statusMonitor.log(
+                    "error",
+                    "Falha ao publicar painel",
+                    error.message,
+                    "Discord"
+                );
             }
         } else if (!ownerId) {
             this.logger.warn(
@@ -145,6 +218,18 @@ export class DiscordBridge {
 
         this.logger.info(`[discord] Conectado como ${this.client.user.tag}.`);
         return true;
+    }
+
+    reportXatStatus(state, detail) {
+        return this.statusMonitor.setXat(state, detail);
+    }
+
+    reportOperationalLog(level, title, detail, component) {
+        return this.statusMonitor.log(level, title, detail, component);
+    }
+
+    confirmXatActivity() {
+        this.statusMonitor.touchXat();
     }
 
     async handleInteraction(interaction) {
@@ -226,6 +311,12 @@ export class DiscordBridge {
             return true;
         } catch (error) {
             this.logger.error(`[discord] Falha ao enviar alerta privado: ${error.message}`);
+            void this.statusMonitor.log(
+                "error",
+                "Falha ao enviar alerta privado",
+                error.message,
+                "Discord"
+            );
             return false;
         }
     }
@@ -236,6 +327,7 @@ export class DiscordBridge {
         this.channel = null;
         this.ownerUser = null;
         this.panel = null;
+        this.statusMonitor.stop();
         this.client?.destroy();
     }
 }
