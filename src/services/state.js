@@ -9,6 +9,7 @@ export class BotState {
         this.settings = {};
         this.usersFlood = {};
         this.users = new Map();
+        this.recentMessages = [];
         this.userKicks = new Map();
         this.lastMessageUserId = null;
         this.lastMessageTimestamp = 0;
@@ -101,5 +102,58 @@ export class BotState {
                 nickname: user.getNick() || null,
                 regname: user.getRegname() || null,
             }));
+    }
+
+    /**
+     * Keeps enough public history to attribute xat HTML5 reply previews.
+     * This cache exists only in memory and is never written to disk.
+     */
+    rememberMessage(message) {
+        const textKey = this.messageTextKey(message.text);
+        if (!textKey) return;
+
+        const now = Date.now();
+        this.recentMessages.push({
+            userId: message.userId,
+            nickname: message.nickname || null,
+            regname: message.regname || null,
+            text: message.text,
+            textKey,
+            createdAt: now,
+        });
+        this.recentMessages = this.recentMessages
+            .filter((entry) => now - entry.createdAt <= 6 * 60 * 60 * 1_000)
+            .slice(-250);
+    }
+
+    findQuotedMessage(quotedText) {
+        const quotedKey = this.messageTextKey(quotedText);
+        if (!quotedKey) return null;
+
+        for (let index = this.recentMessages.length - 1; index >= 0; index -= 1) {
+            const entry = this.recentMessages[index];
+            if (
+                entry.textKey === quotedKey
+                || entry.textKey.startsWith(quotedKey)
+                || quotedKey.startsWith(entry.textKey)
+            ) {
+                return {
+                    userId: entry.userId,
+                    nickname: entry.nickname,
+                    regname: entry.regname,
+                    text: entry.text,
+                };
+            }
+        }
+        return null;
+    }
+
+    messageTextKey(value) {
+        return String(value || "")
+            .normalize("NFKC")
+            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLocaleLowerCase("pt-BR");
     }
 }

@@ -1,4 +1,5 @@
 import { parseUser } from "../utils/helpers.js";
+import { parseXatReply } from "../services/DiscordTextFormatter.js";
 
 export default {
     name: "m", // Packet name
@@ -17,10 +18,31 @@ export default {
         if (!message) return;
 
         const user = bot.state.getUser(userID);
-        void bot.discordBridge?.relayXatMessage({
+        const reply = parseXatReply(message);
+        const quotedMessage = reply
+            ? bot.state.findQuotedMessage?.(reply.quotedText)
+            : null;
+        const relayedMessage = {
             userId: userID.toString(),
             nickname: user?.getNick(),
             regname: user?.getRegname(),
+            text: reply?.replyText || message,
+            ...(reply ? {
+                replyTo: {
+                    referenceId: reply.referenceId,
+                    text: reply.quotedText,
+                    userId: quotedMessage?.userId || null,
+                    nickname: quotedMessage?.nickname || null,
+                    regname: quotedMessage?.regname || null,
+                },
+            } : {}),
+        };
+
+        void bot.discordBridge?.relayXatMessage(relayedMessage);
+        bot.state.rememberMessage?.({
+            userId: relayedMessage.userId,
+            nickname: relayedMessage.nickname,
+            regname: relayedMessage.regname,
             text: message,
         });
     },

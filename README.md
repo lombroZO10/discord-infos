@@ -69,6 +69,8 @@ Fontes Unicode decorativas, acentos combinados e caracteres invisíveis são nor
 
 O alerta privado é propositalmente compacto: mostra somente o nick, a mensagem e a palavra detectada. Quando a regra acionada for apenas um nick monitorado, o campo de gatilho informa esse nick.
 
+Respostas criadas pela função de citação do xat (`❯#referência[texto]`) são reconstruídas no alerta privado. O embed mostra o autor e o texto da mensagem citada acima da resposta nova. A atribuição usa um histórico temporário de até 250 mensagens públicas mantido somente em memória; se a referência for anterior ao início do bot ou não estiver mais disponível, o texto ainda é exibido como **Mensagem citada**, sem inventar um autor.
+
 O comando Discord `/onlines` mostra no canal em que foi usado uma lista ordenada das pessoas atualmente presentes no xat. A resposta não envia nenhuma ação ao xat e é apagada automaticamente após 60 segundos.
 
 ## Canal operacional do Discord

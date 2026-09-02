@@ -28,6 +28,21 @@ const displayNameFor = (message) => (
     message.nickname || message.regname || message.userId || "Usuário desconhecido"
 );
 
+const quotedReplyField = (replyTo) => {
+    if (!replyTo?.text) return null;
+
+    const quotedAuthor = replyTo.nickname || replyTo.regname;
+    const author = quotedAuthor
+        ? `**${escapeMarkdown(quotedAuthor)}**`
+        : "**Mensagem citada**";
+    const text = escapeMarkdown(formatXatTextForDiscord(replyTo.text)).slice(0, 850);
+
+    return {
+        name: quotedAuthor ? "↩️ Em resposta a" : "↩️ Em resposta",
+        value: `${author}\n> ${text.replace(/\n/g, "\n> ")}`.slice(0, 1_024),
+    };
+};
+
 const detectedRule = (matches) => {
     if (matches.keywords.length) {
         return matches.keywords
@@ -282,6 +297,7 @@ export class DiscordBridge {
             const discordText = formatXatTextForDiscord(message.text);
             const safeText = escapeMarkdown(discordText).slice(0, 3_500);
             const color = this.store.snapshot?.().color;
+            const replyField = quotedReplyField(message.replyTo);
             const embed = new EmbedBuilder()
                 .setColor(discordColorValue(color))
                 .setAuthor({ name: "REΛLEZA  •  ALERTA PRIVADO" })
@@ -289,6 +305,7 @@ export class DiscordBridge {
                 .setThumbnail(`attachment://${LOGO_NAME}`)
                 .setDescription(`>>> ${safeText}`)
                 .addFields(
+                    ...(replyField ? [replyField] : []),
                     {
                         name: matches.keywords.length > 1
                             ? "🎯 Palavras citadas"

@@ -38,3 +38,26 @@ export const formatXatTextForDiscord = (value) => {
     }
     return text;
 };
+
+/**
+ * Splits the reply notation emitted by the xat HTML5 client:
+ * ❯#reference[quoted message] reply text
+ */
+export const parseXatReply = (value) => {
+    const text = String(value || "").trim();
+    const match = text.match(/^❯#([a-z0-9]+)\[/i);
+    if (!match) return null;
+
+    const quoteStart = match[0].length;
+    const quoteEnd = text.indexOf("]", quoteStart);
+    if (quoteEnd < quoteStart) return null;
+
+    const quotedText = text.slice(quoteStart, quoteEnd).trim();
+    if (!quotedText) return null;
+
+    return {
+        referenceId: match[1],
+        quotedText,
+        replyText: text.slice(quoteEnd + 1).trim(),
+    };
+};

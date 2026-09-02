@@ -13,7 +13,10 @@ import { DiscordControlPanel } from "../src/services/DiscordControlPanel.js";
 import { DiscordMonitorStore } from "../src/services/DiscordMonitorStore.js";
 import { DiscordOnlineCommand } from "../src/services/DiscordOnlineCommand.js";
 import { DiscordStatusMonitor } from "../src/services/DiscordStatusMonitor.js";
-import { formatXatTextForDiscord } from "../src/services/DiscordTextFormatter.js";
+import {
+    formatXatTextForDiscord,
+    parseXatReply,
+} from "../src/services/DiscordTextFormatter.js";
 import { BotState } from "../src/services/state.js";
 
 const createConnectedBot = (profile = {}) => {
@@ -336,6 +339,101 @@ test("known xat smile codes and emoticons become Discord-friendly emoji", () => 
         formatXatTextForDiscord("Olha o (cd) :) (heart) :D (desconhecido)"),
         "Olha o 💿 🙂 ❤️ 😄 (desconhecido)"
     );
+});
+
+test("xat HTML5 reply notation is separated from the new message", () => {
+    assert.deepEqual(
+        parseXatReply("❯#lmhljyakw[Como fala odeio em inglês] i hate"),
+        {
+            referenceId: "lmhljyakw",
+            quotedText: "Como fala odeio em inglês",
+            replyText: "i hate",
+        }
+    );
+    assert.deepEqual(
+        parseXatReply("❯#werk328pb[Nevadinho gosta ❯rosinha(kredface#none#ff6984#ffffff)] parece a minha"),
+        {
+            referenceId: "werk328pb",
+            quotedText: "Nevadinho gosta ❯rosinha(kredface#none#ff6984#ffffff)",
+            replyText: "parece a minha",
+        }
+    );
+    assert.equal(parseXatReply("Mensagem normal"), null);
+});
+
+test("quoted xat messages recover their author from the in-memory history", async () => {
+    const relayed = [];
+    const state = Object.create(BotState.prototype);
+    state.recentMessages = [];
+    state.getUser = (id) => ({
+        getNick: () => id === 10 ? "Rosinha" : "Monitorado",
+        getRegname: () => id === 10 ? "rosinha" : "monitorado",
+    });
+    const bot = {
+        state,
+        discordBridge: {
+            relayXatMessage: (message) => relayed.push(message),
+        },
+    };
+
+    await MessageHandler.execute(bot, { u: "10", t: "Não gosto de nd rosa (eek)" });
+    await MessageHandler.execute(bot, {
+        u: "20",
+        t: "❯#6szag5xof[Não gosto de nd rosa (eek)] parece a minha",
+    });
+
+    assert.equal(relayed[1].text, "parece a minha");
+    assert.deepEqual(relayed[1].replyTo, {
+        referenceId: "6szag5xof",
+        text: "Não gosto de nd rosa (eek)",
+        userId: "10",
+        nickname: "Rosinha",
+        regname: "rosinha",
+    });
+});
+
+test("private alerts render a readable xat reply with author and quoted text", async () => {
+    const privateMessages = [];
+    const bridge = new DiscordBridge({
+        ownerId: "123456789012345678",
+    }, {
+        info() {}, warn() {}, error() {},
+    }, {
+        on() {},
+        destroy() {},
+        users: {
+            fetch: async () => ({
+                send: async (payload) => privateMessages.push(payload),
+            }),
+        },
+    }, {
+        match: () => ({ matched: true, keywords: [], nicknames: ["Monitorado"] }),
+    });
+
+    await bridge.sendAlert({
+        userId: "20",
+        nickname: "Monitorado",
+        text: "parece a minha",
+        replyTo: {
+            referenceId: "6szag5xof",
+            userId: "10",
+            nickname: "Rosinha",
+            regname: "rosinha",
+            text: "Não gosto de nd rosa (eek)",
+        },
+    }, {
+        matched: true,
+        keywords: [],
+        nicknames: ["Monitorado"],
+    });
+
+    const embed = privateMessages[0].embeds[0].toJSON();
+    assert.equal(embed.fields[0].name, "↩️ Em resposta a");
+    assert.match(embed.fields[0].value, /Rosinha/);
+    assert.match(embed.fields[0].value, /Não gosto de nd rosa/);
+    assert.match(embed.fields[0].value, /\(eek\)/);
+    assert.equal(embed.description, ">>> parece a minha");
+    assert.equal(embed.fields[1].name, "🎯 Gatilho");
 });
 
 test("the online snapshot excludes the bot and exposes no mutable user objects", () => {
