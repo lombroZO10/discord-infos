@@ -28,14 +28,21 @@ const connectionLabel = (state) => ({
 }[state] || "⚪ Aguardando");
 
 export class DiscordStatusMonitor {
-    constructor({ logger, chatName, heartbeatMs = 300_000 } = {}) {
+    constructor({
+        logger,
+        chatName,
+        heartbeatMs = 300_000,
+        schedule = setTimeout,
+    } = {}) {
         this.logger = logger;
         this.chatName = chatName || "não informado";
         this.heartbeatMs = heartbeatMs;
+        this.schedule = schedule;
         this.channel = null;
         this.dashboardMessage = null;
         this.queue = Promise.resolve();
         this.pending = [];
+        this.deletionTimers = new Set();
         this.heartbeatTimer = null;
         this.startedAt = Date.now();
         this.reconnections = 0;
@@ -120,13 +127,29 @@ export class DiscordStatusMonitor {
                 .addFields({ name: "Componente", value: safeText(component, 100), inline: true })
                 .setTimestamp();
 
-            await this.channel.send({
+            const message = await this.channel.send({
                 embeds: [embed],
                 allowedMentions: { parse: [] },
             });
+            if (normalizedLevel !== "error" && typeof message?.delete === "function") {
+                this.scheduleDeletion(message);
+            }
             await this.refreshNow();
             return true;
         });
+    }
+
+    scheduleDeletion(message) {
+        const timer = this.schedule(() => {
+            this.deletionTimers.delete(timer);
+            void message.delete().catch((error) => {
+                this.logger?.warn(
+                    `[discord-status] Não foi possível apagar um aviso temporário: ${error.message}`
+                );
+            });
+        }, 60_000);
+        this.deletionTimers.add(timer);
+        timer.unref?.();
     }
 
     dashboardPayload() {
@@ -188,6 +211,8 @@ export class DiscordStatusMonitor {
 
     stop() {
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        for (const timer of this.deletionTimers) clearTimeout(timer);
+        this.deletionTimers.clear();
         this.heartbeatTimer = null;
         this.channel = null;
         this.dashboardMessage = null;

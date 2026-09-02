@@ -75,6 +75,8 @@ O comando Discord `/onlines` mostra no canal em que foi usado uma lista ordenada
 
 `DISCORD_STATUS_CHANNEL_ID` configura um segundo canal, separado do painel e dos alertas. Use obrigatoriamente um ID diferente de `DISCORD_CHANNEL_ID`. Ele recebe em tempo real os eventos importantes de inicialização, conexão, desconexão, reconexão e erros do xat. Um painel de saúde mostra o estado atual do Discord e do xat, o último sinal confirmado pelo WebSocket, o tempo ativo, a quantidade de reconexões e o último evento; ele é atualizado em cada mudança e a cada cinco minutos.
 
+O painel de saúde e os erros graves permanecem no canal. Avisos, confirmações de conexão e outros eventos operacionais básicos são temporários e apagados automaticamente após 60 segundos. O histórico completo continua disponível em `logs/app.log` na VPS.
+
 Os pacotes brutos e credenciais nunca são publicados no Discord. Logs repetitivos de protocolo continuam disponíveis somente em `logs/app.log`, evitando vazamento de sessão e bloqueio por excesso de mensagens. Se o canal operacional estiver ausente ou inválido, a ponte e o bot do xat continuam funcionando normalmente e registram o problema localmente.
 
 ## Execução

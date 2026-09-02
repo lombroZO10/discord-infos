@@ -529,19 +529,31 @@ test("an invalid owner ID disables alerts while leaving the Discord client isola
 test("the operational channel keeps a live dashboard and separate xat events", async () => {
     const messages = [];
     const edits = [];
+    const deletions = [];
+    const scheduled = [];
     const dashboardMessage = {
         edit: async (payload) => edits.push(payload),
     };
     const channel = {
         send: async (payload) => {
             messages.push(payload);
-            return messages.length === 1 ? dashboardMessage : { id: String(messages.length) };
+            return messages.length === 1
+                ? dashboardMessage
+                : {
+                    id: String(messages.length),
+                    delete: async () => deletions.push(messages.length),
+                };
         },
     };
     const monitor = new DiscordStatusMonitor({
         logger: { error() {} },
         chatName: "rhb",
         heartbeatMs: 3_600_000,
+        schedule: (callback, delay) => {
+            const timer = { callback, delay, unref() {} };
+            scheduled.push(timer);
+            return timer;
+        },
     });
 
     await monitor.setXat("connecting", "Preparando conexão.");
@@ -564,6 +576,38 @@ test("the operational channel keeps a live dashboard and separate xat events", a
         /<t:\d+:R>/
     );
     assert.deepEqual(messages[4].allowedMentions, { parse: [] });
+    assert.equal(scheduled.length, 4);
+    assert.ok(scheduled.every((timer) => timer.delay === 60_000));
+    scheduled[0].callback();
+    await Promise.resolve();
+    assert.equal(deletions.length, 1);
+    monitor.stop();
+});
+
+test("serious operational errors remain in the status channel", async () => {
+    const scheduled = [];
+    const messages = [];
+    const monitor = new DiscordStatusMonitor({
+        logger: { error() {}, warn() {} },
+        heartbeatMs: 3_600_000,
+        schedule: (callback, delay) => {
+            scheduled.push({ callback, delay });
+            return { unref() {} };
+        },
+    });
+    const dashboard = { edit: async () => {} };
+    await monitor.attach({
+        send: async (payload) => {
+            messages.push(payload);
+            return messages.length === 1 ? dashboard : { delete: async () => {} };
+        },
+    }, "Bridge#0001");
+
+    const basicTimers = scheduled.length;
+    await monitor.log("error", "Falha crítica", "Conexão recusada.", "xat");
+
+    assert.equal(scheduled.length, basicTimers);
+    assert.match(messages.at(-1).embeds[0].toJSON().title, /Falha crítica/);
     monitor.stop();
 });
 
