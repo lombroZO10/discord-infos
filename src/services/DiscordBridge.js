@@ -1,13 +1,11 @@
 import {
     ActivityType,
-    AttachmentBuilder,
     Client,
     EmbedBuilder,
     Events,
     GatewayIntentBits,
     escapeMarkdown,
 } from "discord.js";
-import { fileURLToPath } from "node:url";
 import { DiscordControlPanel } from "./DiscordControlPanel.js";
 import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
 import { discordColorValue } from "./DiscordColor.js";
@@ -16,8 +14,6 @@ import { DiscordOnlineCommand } from "./DiscordOnlineCommand.js";
 import { DiscordStatusMonitor } from "./DiscordStatusMonitor.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
-const LOGO_NAME = "realeza-logo.png";
-const LOGO_PATH = fileURLToPath(new URL("../../assets/realeza-logo.png", import.meta.url));
 const DEFAULT_ACTIVITIES = Object.freeze([
     "o império crescer",
     "as oportunidades surgirem",
@@ -300,29 +296,29 @@ export class DiscordBridge {
             const replyField = quotedReplyField(message.replyTo);
             const embed = new EmbedBuilder()
                 .setColor(discordColorValue(color))
-                .setAuthor({ name: "REΛLEZA  •  ALERTA PRIVADO" })
-                .setTitle(`👤 ${displayName}`.slice(0, 256))
-                .setThumbnail(`attachment://${LOGO_NAME}`)
-                .setDescription(`>>> ${safeText}`)
+                .setAuthor({ name: "REΛLEZA  •  MONITOR PRIVADO" })
+                .setTitle("⚡ Alerta detectado")
+                .setDescription(`### 👤 ${displayName}`.slice(0, 4_096))
                 .addFields(
                     ...(replyField ? [replyField] : []),
                     {
+                        name: "💬 Mensagem enviada",
+                        value: `>>> ${safeText}`.slice(0, 1_024),
+                    },
+                    {
                         name: matches.keywords.length > 1
-                            ? "🎯 Palavras citadas"
+                            ? "🎯 Palavras detectadas"
                             : matches.keywords.length === 1
-                                ? "🎯 Palavra citada"
-                                : "🎯 Gatilho",
+                                ? "🎯 Palavra detectada"
+                                : "🎯 Perfil monitorado",
                         value: detectedRule(matches).slice(0, 1_024),
                     }
                 )
-                .setFooter({ text: "REΛLEZA • monitoramento confidencial" })
+                .setFooter({ text: "REΛLEZA • inteligência em tempo real" })
                 .setTimestamp();
 
             await this.ownerUser.send({
                 embeds: [embed],
-                files: [
-                    new AttachmentBuilder(LOGO_PATH).setName(LOGO_NAME),
-                ],
                 allowedMentions: { parse: [] },
             });
             return true;

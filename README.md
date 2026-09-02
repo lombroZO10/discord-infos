@@ -59,7 +59,7 @@ O bot do Discord precisa conseguir visualizar o canal, enviar mensagens e ler o 
 
 Ao conectar, o bot cria ou recupera no canal um painel com dois botões: **Configurar palavras** e **Configurar nicks**. Somente a conta definida em `DISCORD_OWNER_ID` pode usar os controles. Cada modal aceita um item por linha; enviar o campo vazio limpa aquela lista.
 
-O botão **Cor principal** aceita uma cor hexadecimal, usando `#7F05F5` como padrão. A cor é salva e aplicada ao painel e aos alertas privados. A logo aparece nos dois; o banner é exibido somente no painel principal.
+O botão **Cor principal** aceita uma cor hexadecimal, usando `#7F05F5` como padrão. A cor é salva e aplicada ao painel e aos alertas privados. A logo e o banner aparecem somente no painel principal; os alertas privados não enviam imagens ou anexos.
 
 `DISCORD_ACTIVITY` aceita uma ou mais frases separadas por `|`, alternadas aleatoriamente a cada minuto. O valor antigo `xat.com` ativa automaticamente as três frases padrão desta versão.
 
@@ -67,7 +67,7 @@ Palavras-chave são comparadas como palavras ou frases completas, sem diferencia
 
 Fontes Unicode decorativas, acentos combinados e caracteres invisíveis são normalizados durante a comparação dos nicks. Na mensagem privada, smiles conhecidos do xat, como `(cd)`, `(heart)`, `:)`, `:D` e `<3`, são convertidos para emojis do Discord; códigos desconhecidos são preservados.
 
-O alerta privado é propositalmente compacto: mostra somente o nick, a mensagem e a palavra detectada. Quando a regra acionada for apenas um nick monitorado, o campo de gatilho informa esse nick.
+O alerta privado é propositalmente compacto e sem imagens: destaca o nick, a mensagem e a palavra detectada. Quando a regra acionada for apenas um nick monitorado, o campo de perfil monitorado informa esse nick.
 
 Respostas criadas pela função de citação do xat (`❯#referência[texto]`) são reconstruídas no alerta privado. O embed mostra o autor e o texto da mensagem citada acima da resposta nova. A atribuição usa um histórico temporário de até 250 mensagens públicas mantido somente em memória; se a referência for anterior ao início do bot ou não estiver mais disponível, o texto ainda é exibido como **Mensagem citada**, sem inventar um autor.
 
