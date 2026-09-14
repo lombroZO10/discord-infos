@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { MessageFlags } from "discord.js";
 
 import Handlers from "../src/handlers/_all.js";
 import ChatConnectionHandler from "../src/handlers/ChatConnectionHandler.js";
@@ -925,9 +926,10 @@ test("/tv registers, replies with a live embed and refreshes it automatically", 
     const firstEmbed = replies[0].embeds[0].toJSON();
     assert.match(firstEmbed.title, /minhasala/);
     assert.match(firstEmbed.description, /Alpha/);
-    assert.match(firstEmbed.fields[0].name, /2/);
-    assert.match(firstEmbed.fields[0].value, /Alpha/);
-    assert.equal(replies[0].components[0].components[0].data.custom_id, "tv:stop:session-1");
+    assert.equal(firstEmbed.fields, undefined);
+    assert.match(firstEmbed.footer.text, /2 online/);
+    assert.equal(replies[0].components[0].components[0].data.custom_id, "tv:online");
+    assert.equal(replies[0].components[0].components[1].data.custom_id, "tv:stop:session-1");
     assert.equal(scheduled[0].delay, 4_000);
 
     scheduled[0].callback();
@@ -1023,7 +1025,25 @@ test("/tv renders a reply-to message as a readable quote instead of raw xat nota
     assert.match(description, /parece a minha/);
 });
 
-test("/tv arranges the online list into side-by-side inline columns", () => {
+test("/tv keeps the live embed free of the online list, showing a small count in the footer instead", () => {
+    const users = [
+        { userId: "1", nickname: "Alpha", regname: "alpha" },
+        { userId: "2", nickname: "Beta", regname: "beta" },
+    ];
+    const command = new DiscordTvCommand({
+        getUsers: () => users,
+        getMessages: () => [],
+        getColor: () => "#7F05F5",
+        chatName: "sala",
+        logger: { warn() {} },
+    });
+
+    const embed = command.payload(60_000).embeds[0].toJSON();
+    assert.equal(embed.fields, undefined);
+    assert.match(embed.footer.text, /2 online/);
+});
+
+test("the 'Mostrar online' button replies with a private, side-by-side column list", async () => {
     const users = Array.from({ length: 41 }, (_, index) => ({
         userId: String(index),
         nickname: `Pessoa${String(index).padStart(2, "0")}`,
@@ -1037,10 +1057,22 @@ test("/tv arranges the online list into side-by-side inline columns", () => {
         logger: { warn() {} },
     });
 
-    const embed = command.payload(60_000).embeds[0].toJSON();
+    const replies = [];
+    const handled = await command.handle({
+        isButton: () => true,
+        customId: "tv:online",
+        user: { id: "viewer" },
+        reply: async (payload) => replies.push(payload),
+    });
+    assert.equal(handled, true);
+
+    assert.equal(replies[0].flags, MessageFlags.Ephemeral);
+    assert.deepEqual(replies[0].allowedMentions, { parse: [] });
+
+    const embed = replies[0].embeds[0].toJSON();
     assert.equal(embed.fields.length, 3);
     assert.ok(embed.fields.every((field) => field.inline === true));
-    assert.match(embed.fields[0].name, /👥 Online agora  •  41/);
+    assert.match(embed.fields[0].name, /👥.*41/);
     assert.equal(embed.fields[1].name, "​");
     assert.equal(embed.fields[2].name, "​");
     assert.match(embed.fields[0].value, /Pessoa00/);

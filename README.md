@@ -73,7 +73,7 @@ Respostas criadas pela função de citação do xat (`❯#referência[texto]`) s
 
 O comando Discord `/onlines` mostra no canal em que foi usado uma lista ordenada das pessoas atualmente presentes no xat. A resposta não envia nenhuma ação ao xat e é apagada automaticamente após 60 segundos.
 
-O comando Discord `/tv` abre uma transmissão ao vivo da sala no canal em que foi usado: um painel com quem está presente no momento e as últimas mensagens públicas, atualizado automaticamente a cada poucos segundos. Nenhuma ação é enviada ao xat; o painel apenas lê o mesmo cache de presença e o histórico de mensagens em memória usados internamente pelo bot. Por causa do limite de validade das interações do Discord, a transmissão se encerra sozinha após cerca de 14 minutos; use `/tv` novamente para continuar assistindo. O botão **Parar transmissão** encerra a exibição antes disso e só funciona para quem executou o comando.
+O comando Discord `/tv` abre uma transmissão ao vivo da sala no canal em que foi usado: um painel com as últimas mensagens públicas, atualizado automaticamente a cada poucos segundos. Nenhuma ação é enviada ao xat; o painel apenas lê o mesmo cache de presença e o histórico de mensagens em memória usados internamente pelo bot. Por causa do limite de validade das interações do Discord, a transmissão se encerra sozinha após cerca de 14 minutos; use `/tv` novamente para continuar assistindo. O botão **Parar transmissão** encerra a exibição antes disso e só funciona para quem executou o comando. O botão **Mostrar online** responde só para quem clicou com a lista de presença organizada em colunas, sem ocupar espaço no painel principal.
 
 ## Canal operacional do Discord
 

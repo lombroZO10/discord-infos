@@ -11,14 +11,14 @@ import { formatXatTextForDiscord } from "./DiscordTextFormatter.js";
 
 const COMMAND_NAME = "tv";
 const STOP_PREFIX = "tv:stop:";
+const ONLINE_BUTTON_ID = "tv:online";
 const REFRESH_MS = 4_000;
 // Discord invalida o token de uma interação após 15 minutos; paramos antes disso.
 const MAX_DURATION_MS = 14 * 60_000;
-const MESSAGE_COUNT = 18;
-// O embed inteiro (título + descrição + campos + rodapé) tem um limite total de
-// 6.000 caracteres na API do Discord; a descrição e as colunas de presença
-// dividem esse orçamento para nunca estourar o limite mesmo com a sala cheia.
-const DESCRIPTION_LIMIT = 2_900;
+const MESSAGE_COUNT = 30;
+// A descrição do embed tem um limite próprio de 4.096 caracteres na API do
+// Discord; deixamos uma margem de segurança para o resto do embed.
+const DESCRIPTION_LIMIT = 3_900;
 const ONLINE_COLUMNS = 3;
 const COLUMN_LIMIT = 950;
 
@@ -154,11 +154,35 @@ export class DiscordTvCommand {
             await this.start(interaction);
             return true;
         }
+        if (interaction.isButton?.() && interaction.customId === ONLINE_BUTTON_ID) {
+            await this.showOnline(interaction);
+            return true;
+        }
         if (interaction.isButton?.() && interaction.customId?.startsWith(STOP_PREFIX)) {
             await this.stopFromButton(interaction);
             return true;
         }
         return false;
+    }
+
+    async showOnline(interaction) {
+        const users = this.getUsers() || [];
+        const embed = new EmbedBuilder()
+            .setColor(discordColorValue(this.getColor?.()))
+            .setAuthor({ name: "REΛLEZA  •  PRESENÇA AO VIVO" })
+            .setTitle(`👥 Online no xat  •  ${users.length}`)
+            .addFields(...onlineColumns(users))
+            .setTimestamp();
+
+        try {
+            await interaction.reply({
+                embeds: [embed],
+                flags: MessageFlags.Ephemeral,
+                allowedMentions: { parse: [] },
+            });
+        } catch (error) {
+            this.logger?.warn(`[discord] Não foi possível mostrar os onlines da TV: ${error.message}`);
+        }
     }
 
     payload(remainingMs) {
@@ -170,9 +194,9 @@ export class DiscordTvCommand {
             .setAuthor({ name: "REΛLEZA  •  TV AO VIVO" })
             .setTitle(`📺 ${escapeMarkdown(this.chatName)}`)
             .setDescription(chatFeed(this.getMessages() || []))
-            .addFields(...onlineColumns(users))
             .setFooter({
-                text: `Atualiza a cada ${REFRESH_MS / 1_000}s • Encerra em até ${minutesLeft} min`,
+                text: `👥 ${users.length} online • Atualiza a cada ${REFRESH_MS / 1_000}s`
+                    + ` • Encerra em até ${minutesLeft} min`,
             })
             .setTimestamp();
 
@@ -184,6 +208,11 @@ export class DiscordTvCommand {
         const startedAt = Date.now();
 
         const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(ONLINE_BUTTON_ID)
+                .setLabel("Mostrar online")
+                .setEmoji("👥")
+                .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId(`${STOP_PREFIX}${sessionId}`)
                 .setLabel("Parar transmissão")
