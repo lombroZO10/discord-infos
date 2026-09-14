@@ -11,6 +11,7 @@ import { DiscordMonitorStore } from "./DiscordMonitorStore.js";
 import { discordColorValue } from "./DiscordColor.js";
 import { formatXatTextForDiscord } from "./DiscordTextFormatter.js";
 import { DiscordOnlineCommand } from "./DiscordOnlineCommand.js";
+import { DiscordTvCommand } from "./DiscordTvCommand.js";
 import { DiscordStatusMonitor } from "./DiscordStatusMonitor.js";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
@@ -52,7 +53,7 @@ const detectedRule = (matches) => {
 };
 
 export class DiscordBridge {
-    constructor(config, logger, client = null, store = null, getOnlineUsers = null) {
+    constructor(config, logger, client = null, store = null, getOnlineUsers = null, getRecentMessages = null) {
         this.config = config;
         this.logger = logger;
         this.channel = null;
@@ -66,6 +67,13 @@ export class DiscordBridge {
         this.onlineCommand = new DiscordOnlineCommand({
             getUsers: getOnlineUsers || (() => []),
             getColor: () => this.store.snapshot?.().color,
+            logger,
+        });
+        this.tvCommand = new DiscordTvCommand({
+            getUsers: getOnlineUsers || (() => []),
+            getMessages: getRecentMessages || (() => []),
+            getColor: () => this.store.snapshot?.().color,
+            chatName: config.chatName,
             logger,
         });
         this.statusMonitor = new DiscordStatusMonitor({
@@ -202,6 +210,19 @@ export class DiscordBridge {
             );
         }
 
+        try {
+            const commandManager = channel.guild?.commands || this.client.application?.commands;
+            await this.tvCommand.register(commandManager);
+        } catch (error) {
+            this.logger.error(`[discord] Não foi possível registrar /tv: ${error.message}`);
+            void this.statusMonitor.log(
+                "error",
+                "Falha ao registrar /tv",
+                error.message,
+                "Discord"
+            );
+        }
+
         if (validOwnerId) {
             this.panel = new DiscordControlPanel({
                 client: this.client,
@@ -245,6 +266,7 @@ export class DiscordBridge {
 
     async handleInteraction(interaction) {
         if (await this.onlineCommand.handle(interaction)) return;
+        if (await this.tvCommand.handle(interaction)) return;
         await this.panel?.handleInteraction(interaction);
     }
 
@@ -340,6 +362,7 @@ export class DiscordBridge {
         this.channel = null;
         this.ownerUser = null;
         this.panel = null;
+        this.tvCommand?.stop();
         this.statusMonitor.stop();
         this.client?.destroy();
     }

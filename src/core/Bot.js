@@ -25,7 +25,8 @@ export class Bot {
             this.logger,
             null,
             null,
-            () => this.state.getOnlineUsers()
+            () => this.state.getOnlineUsers(),
+            () => this.state.getRecentMessages()
         );
 
         this.packetHandler = new PacketHandler(this);
