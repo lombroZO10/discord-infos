@@ -12,6 +12,7 @@ import { DiscordBridge } from "../src/services/DiscordBridge.js";
 import { DiscordControlPanel } from "../src/services/DiscordControlPanel.js";
 import { DiscordMonitorStore } from "../src/services/DiscordMonitorStore.js";
 import { DiscordOnlineCommand } from "../src/services/DiscordOnlineCommand.js";
+import { DiscordTvCommand } from "../src/services/DiscordTvCommand.js";
 import { DiscordStatusMonitor } from "../src/services/DiscordStatusMonitor.js";
 import {
     formatXatTextForDiscord,
@@ -454,6 +455,22 @@ test("the online snapshot excludes the bot and exposes no mutable user objects",
     }]);
 });
 
+test("the recent messages snapshot keeps only public text fields, most recent last", () => {
+    const state = Object.create(BotState.prototype);
+    state.recentMessages = [
+        { userId: "1", nickname: "Alpha", regname: "alpha", text: "oi", textKey: "oi", createdAt: 1 },
+        { userId: "2", nickname: "Beta", regname: "beta", text: "tudo bem?", textKey: "tudo bem?", createdAt: 2 },
+    ];
+
+    assert.deepEqual(state.getRecentMessages(), [
+        { userId: "1", nickname: "Alpha", regname: "alpha", text: "oi" },
+        { userId: "2", nickname: "Beta", regname: "beta", text: "tudo bem?" },
+    ]);
+    assert.deepEqual(state.getRecentMessages(1), [
+        { userId: "2", nickname: "Beta", regname: "beta", text: "tudo bem?" },
+    ]);
+});
+
 test("/onlines replies safely and deletes its list after exactly one minute", async () => {
     const replies = [];
     const created = [];
@@ -828,4 +845,128 @@ test("the Discord control panel is persistent and restricted to the owner", asyn
     });
     assert.deepEqual(state.nicknames, ["NovoNick"]);
     assert.ok(edits.length >= 1);
+});
+
+test("/tv registers, replies with a live embed and refreshes it automatically", async () => {
+    const created = [];
+    const replies = [];
+    const edits = [];
+    const scheduled = [];
+    const cleared = [];
+    const command = new DiscordTvCommand({
+        getUsers: () => [
+            { userId: "1", nickname: "Alpha", regname: "alpha" },
+            { userId: "2", nickname: "Beta", regname: "beta" },
+        ],
+        getMessages: () => [
+            { userId: "1", nickname: "Alpha", regname: "alpha", text: "oi :)" },
+        ],
+        getColor: () => "#7F05F5",
+        chatName: "minhasala",
+        logger: { warn() {} },
+        schedule: (callback, delay) => {
+            const timer = { callback, delay };
+            scheduled.push(timer);
+            return timer;
+        },
+        clearSchedule: (timer) => cleared.push(timer),
+    });
+
+    assert.equal(await command.register({
+        fetch: async () => new Map(),
+        create: async (definition) => created.push(definition),
+    }), true);
+    assert.equal(created[0].name, "tv");
+
+    const interaction = {
+        id: "session-1",
+        user: { id: "requester" },
+        reply: async (payload) => replies.push(payload),
+        editReply: async (payload) => edits.push(payload),
+    };
+
+    assert.equal(await command.handle({
+        isChatInputCommand: () => true,
+        commandName: "tv",
+        ...interaction,
+    }), true);
+
+    const firstEmbed = replies[0].embeds[0].toJSON();
+    assert.match(firstEmbed.title, /minhasala/);
+    assert.match(firstEmbed.description, /Alpha/);
+    assert.match(firstEmbed.fields[0].name, /2/);
+    assert.match(firstEmbed.fields[0].value, /Alpha/);
+    assert.equal(replies[0].components[0].components[0].data.custom_id, "tv:stop:session-1");
+    assert.equal(scheduled[0].delay, 4_000);
+
+    scheduled[0].callback();
+    await Promise.resolve();
+    assert.equal(edits.length, 1);
+    assert.match(edits[0].embeds[0].toJSON().description, /Alpha/);
+});
+
+test("/tv only lets the requester stop the broadcast, and auto-ends after the token window", async () => {
+    let now = 0;
+    const originalNow = Date.now;
+    Date.now = () => now;
+
+    const updates = [];
+    const ephemeralReplies = [];
+    const editReplies = [];
+    const cleared = [];
+    let scheduledCallback;
+    const command = new DiscordTvCommand({
+        getUsers: () => [],
+        getMessages: () => [],
+        getColor: () => "#7F05F5",
+        chatName: "minhasala",
+        logger: { warn() {} },
+        schedule: (callback) => {
+            scheduledCallback = callback;
+            return { id: "timer" };
+        },
+        clearSchedule: (timer) => cleared.push(timer),
+    });
+
+    const commandInteraction = {
+        id: "session-2",
+        user: { id: "owner" },
+        reply: async () => {},
+        editReply: async (payload) => editReplies.push(payload),
+    };
+
+    try {
+        await command.handle({
+            isChatInputCommand: () => true,
+            commandName: "tv",
+            ...commandInteraction,
+        });
+
+        const stopByStranger = await command.handle({
+            isButton: () => true,
+            customId: "tv:stop:session-2",
+            user: { id: "stranger" },
+            reply: async (payload) => ephemeralReplies.push(payload),
+        });
+        assert.equal(stopByStranger, true);
+        assert.match(ephemeralReplies[0].content, /Somente quem iniciou/);
+        assert.equal(cleared.length, 0);
+
+        now = 15 * 60_000;
+        scheduledCallback();
+        await Promise.resolve();
+        assert.match(editReplies.at(-1).content, /encerrada automaticamente/);
+        assert.equal(cleared.length, 1);
+
+        const stopAfterEnd = await command.handle({
+            isButton: () => true,
+            customId: "tv:stop:session-2",
+            user: { id: "owner" },
+            update: async (payload) => updates.push(payload),
+        });
+        assert.equal(stopAfterEnd, true);
+        assert.match(updates[0].content, /encerrada/);
+    } finally {
+        Date.now = originalNow;
+    }
 });

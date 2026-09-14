@@ -105,6 +105,18 @@ export class BotState {
     }
 
     /**
+     * Returns a safe snapshot of the most recent public messages, oldest first.
+     */
+    getRecentMessages(limit = 20) {
+        return this.recentMessages.slice(-limit).map((entry) => ({
+            userId: entry.userId,
+            nickname: entry.nickname,
+            regname: entry.regname,
+            text: entry.text,
+        }));
+    }
+
+    /**
      * Keeps enough public history to attribute xat HTML5 reply previews.
      * This cache exists only in memory and is never written to disk.
      */
