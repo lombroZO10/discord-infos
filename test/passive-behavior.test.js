@@ -471,6 +471,37 @@ test("the recent messages snapshot keeps only public text fields, most recent la
     ]);
 });
 
+test("the recent messages snapshot resolves xat reply notation into a structured quote", () => {
+    const state = Object.create(BotState.prototype);
+    state.recentMessages = [];
+    state.rememberMessage({
+        userId: "10",
+        nickname: "Rosinha",
+        regname: "rosinha",
+        text: "Não gosto de nd rosa",
+    });
+    state.rememberMessage({
+        userId: "20",
+        nickname: "Monitorado",
+        regname: "monitorado",
+        text: "❯#6szag5xof[Não gosto de nd rosa] parece a minha",
+    });
+
+    const [first, second] = state.getRecentMessages();
+    assert.deepEqual(first, {
+        userId: "10",
+        nickname: "Rosinha",
+        regname: "rosinha",
+        text: "Não gosto de nd rosa",
+    });
+    assert.equal(second.text, "parece a minha");
+    assert.deepEqual(second.replyTo, {
+        nickname: "Rosinha",
+        regname: "rosinha",
+        text: "Não gosto de nd rosa",
+    });
+});
+
 test("/onlines replies safely and deletes its list after exactly one minute", async () => {
     const replies = [];
     const created = [];
@@ -969,4 +1000,54 @@ test("/tv only lets the requester stop the broadcast, and auto-ends after the to
     } finally {
         Date.now = originalNow;
     }
+});
+
+test("/tv renders a reply-to message as a readable quote instead of raw xat notation", () => {
+    const command = new DiscordTvCommand({
+        getUsers: () => [],
+        getMessages: () => [{
+            userId: "20",
+            nickname: "Monitorado",
+            regname: "monitorado",
+            text: "parece a minha",
+            replyTo: { nickname: "Rosinha", regname: "rosinha", text: "Não gosto de nd rosa" },
+        }],
+        getColor: () => "#7F05F5",
+        chatName: "sala",
+        logger: { warn() {} },
+    });
+
+    const description = command.payload(60_000).embeds[0].toJSON().description;
+    assert.doesNotMatch(description, /❯#/);
+    assert.match(description, /Rosinha/);
+    assert.match(description, /parece a minha/);
+});
+
+test("/tv arranges the online list into side-by-side inline columns", () => {
+    const users = Array.from({ length: 41 }, (_, index) => ({
+        userId: String(index),
+        nickname: `Pessoa${String(index).padStart(2, "0")}`,
+        regname: `pessoa${index}`,
+    }));
+    const command = new DiscordTvCommand({
+        getUsers: () => users,
+        getMessages: () => [],
+        getColor: () => "#7F05F5",
+        chatName: "sala",
+        logger: { warn() {} },
+    });
+
+    const embed = command.payload(60_000).embeds[0].toJSON();
+    assert.equal(embed.fields.length, 3);
+    assert.ok(embed.fields.every((field) => field.inline === true));
+    assert.match(embed.fields[0].name, /👥 Online agora  •  41/);
+    assert.equal(embed.fields[1].name, "​");
+    assert.equal(embed.fields[2].name, "​");
+    assert.match(embed.fields[0].value, /Pessoa00/);
+
+    const total = [embed.title, embed.description, embed.author?.name, embed.footer?.text]
+        .filter(Boolean)
+        .join("").length
+        + embed.fields.reduce((sum, field) => sum + field.name.length + field.value.length, 0);
+    assert.ok(total < 6_000, `embed total length ${total} exceeds Discord's 6000 character limit`);
 });

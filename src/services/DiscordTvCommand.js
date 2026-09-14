@@ -14,9 +14,13 @@ const STOP_PREFIX = "tv:stop:";
 const REFRESH_MS = 4_000;
 // Discord invalida o token de uma interação após 15 minutos; paramos antes disso.
 const MAX_DURATION_MS = 14 * 60_000;
-const MESSAGE_COUNT = 12;
-const DESCRIPTION_LIMIT = 3_800;
-const FIELD_LIMIT = 1_024;
+const MESSAGE_COUNT = 18;
+// O embed inteiro (título + descrição + campos + rodapé) tem um limite total de
+// 6.000 caracteres na API do Discord; a descrição e as colunas de presença
+// dividem esse orçamento para nunca estourar o limite mesmo com a sala cheia.
+const DESCRIPTION_LIMIT = 2_900;
+const ONLINE_COLUMNS = 3;
+const COLUMN_LIMIT = 950;
 
 const visibleName = (user) => (
     user.nickname || user.regname || `Usuário ${user.userId}`
@@ -28,8 +32,18 @@ const sortName = (user) => visibleName(user)
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
-const onlineSummary = (users) => {
-    if (!users.length) return "*Sala vazia no momento.*";
+/**
+ * Splits the online list into side-by-side inline columns instead of a
+ * single wrapping paragraph, closer to how xat itself lists who's present.
+ */
+const onlineColumns = (users) => {
+    if (!users.length) {
+        return [{
+            name: `👥 Online agora  •  0`,
+            value: "*Sala vazia no momento.*",
+            inline: true,
+        }];
+    }
 
     const names = [...users]
         .sort((first, second) => sortName(first).localeCompare(
@@ -39,26 +53,55 @@ const onlineSummary = (users) => {
         ))
         .map((user) => escapeMarkdown(visibleName(user)));
 
-    let value = "";
-    let shown = 0;
-    for (const name of names) {
-        const next = value ? `${value}, ${name}` : name;
-        if (next.length > FIELD_LIMIT - 20) break;
-        value = next;
-        shown += 1;
+    const perColumn = Math.ceil(names.length / ONLINE_COLUMNS);
+    const columns = [];
+    for (let start = 0; start < names.length; start += perColumn) {
+        columns.push(names.slice(start, start + perColumn));
     }
-    if (shown < names.length) value += `… e mais ${names.length - shown}`;
-    return value;
+
+    return columns.map((column, index) => {
+        const lines = [];
+        let hidden = 0;
+        for (const [lineIndex, name] of column.entries()) {
+            if ([...lines, name].join("\n").length > COLUMN_LIMIT) {
+                hidden = column.length - lineIndex;
+                break;
+            }
+            lines.push(name);
+        }
+        if (hidden) lines.push(`*+ ${hidden}*`);
+
+        return {
+            name: index === 0 ? `👥 Online agora  •  ${users.length}` : "​",
+            value: lines.join("\n") || "​",
+            inline: true,
+        };
+    });
+};
+
+/**
+ * Renders a single feed line. xat's HTML5 reply notation is already resolved
+ * into `replyTo` by state.getRecentMessages(), so it becomes a readable
+ * quote instead of the raw `❯#id[...]` markup.
+ */
+const feedLine = (message) => {
+    const author = escapeMarkdown(message.nickname || message.regname || "Alguém");
+    const text = escapeMarkdown(formatXatTextForDiscord(message.text)).slice(0, 400);
+
+    if (message.replyTo?.text) {
+        const quotedAuthor = message.replyTo.nickname || message.replyTo.regname;
+        const quotedLabel = quotedAuthor ? escapeMarkdown(quotedAuthor) : "mensagem citada";
+        const quotedText = escapeMarkdown(formatXatTextForDiscord(message.replyTo.text)).slice(0, 150);
+        return `↩️ *em resposta a **${quotedLabel}**: "${quotedText}"*\n**${author}:** ${text}`;
+    }
+
+    return `**${author}:** ${text}`;
 };
 
 const chatFeed = (messages) => {
     if (!messages.length) return "*Nenhuma mensagem pública recente.*";
 
-    const lines = messages.slice(-MESSAGE_COUNT).map((message) => {
-        const author = escapeMarkdown(message.nickname || message.regname || "Alguém");
-        const text = escapeMarkdown(formatXatTextForDiscord(message.text)).slice(0, 300);
-        return `**${author}:** ${text}`;
-    });
+    const lines = messages.slice(-MESSAGE_COUNT).map(feedLine);
 
     while (lines.length > 1 && lines.join("\n").length > DESCRIPTION_LIMIT) {
         lines.shift();
@@ -127,10 +170,7 @@ export class DiscordTvCommand {
             .setAuthor({ name: "REΛLEZA  •  TV AO VIVO" })
             .setTitle(`📺 ${escapeMarkdown(this.chatName)}`)
             .setDescription(chatFeed(this.getMessages() || []))
-            .addFields({
-                name: `👥 Online agora  •  ${users.length}`,
-                value: onlineSummary(users),
-            })
+            .addFields(...onlineColumns(users))
             .setFooter({
                 text: `Atualiza a cada ${REFRESH_MS / 1_000}s • Encerra em até ${minutesLeft} min`,
             })
