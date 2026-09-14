@@ -1,3 +1,5 @@
+import { parseXatReply } from "./DiscordTextFormatter.js";
+
 export class BotState {
     constructor() {
         this.ws = null;
@@ -106,14 +108,34 @@ export class BotState {
 
     /**
      * Returns a safe snapshot of the most recent public messages, oldest first.
+     * xat HTML5 reply notation is resolved into a structured quote, the same
+     * way it already is for private alerts, instead of showing the raw markup.
      */
     getRecentMessages(limit = 20) {
-        return this.recentMessages.slice(-limit).map((entry) => ({
-            userId: entry.userId,
-            nickname: entry.nickname,
-            regname: entry.regname,
-            text: entry.text,
-        }));
+        return this.recentMessages.slice(-limit).map((entry) => {
+            const reply = parseXatReply(entry.text);
+            if (!reply) {
+                return {
+                    userId: entry.userId,
+                    nickname: entry.nickname,
+                    regname: entry.regname,
+                    text: entry.text,
+                };
+            }
+
+            const quoted = this.findQuotedMessage(reply.quotedText);
+            return {
+                userId: entry.userId,
+                nickname: entry.nickname,
+                regname: entry.regname,
+                text: reply.replyText,
+                replyTo: {
+                    nickname: quoted?.nickname || null,
+                    regname: quoted?.regname || null,
+                    text: reply.quotedText,
+                },
+            };
+        });
     }
 
     /**
